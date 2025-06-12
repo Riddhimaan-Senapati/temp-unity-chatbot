@@ -1,7 +1,6 @@
 import requests
 from bs4 import BeautifulSoup
 from urllib.parse import urljoin, urlparse
-import time
 import os
 
 MASTER_PAGE_URL = "https://docs.unity.rc.umass.edu/documentation/toc/"
@@ -106,6 +105,6 @@ def extract_text_content(html_content):
 
 def filename_from_url(url):
     filename_base = url.replace("https://", "").replace("http://", "")
-    filename_base = "".join(c if c.isalnum() or c in ['_','-','.'] else '_' for c in filename_base)
+    filename_base = "".join(c if c not in ["/"] else "!" for c in filename_base)
     filename = filename_base + ".md"
     return filename

@@ -1,7 +1,7 @@
 def clean_s3_link(s3_link):
     """
     Cleans an S3-style link to a web-accessible URL.
-    Example input: "s3://umass-unity-chatbot/documents/docs.unity.rc.umass.edu_documentation_cluster_specs_.md"
+    Example input: "s3://umass-unity-chatbot/documents/docs.unity.rc.umass.edu!documentation!cluster_specs_.md"
     Example output: "https://docs.unity.rc.umass.edu/documentation/cluster_specs"
     """
     s3_prefix = "s3://umass-unity-chatbot/documents/"
@@ -15,17 +15,17 @@ def clean_s3_link(s3_link):
     # 1. Remove the S3 prefix
     path_component = s3_link[len(s3_prefix):]
 
-    # 2. Handle the specific case of a trailing underscore and the .md extension
-    # e.g., "something_.md" should become "something" before replacing other underscores
-    if path_component.endswith(f"_{file_extension}"):
+    # 2. Handle the specific case of the .md extension
+    # e.g., "something.md" should become "something" before replacing other underscores
+    if path_component.endswith(f"{file_extension}"):
         # Remove the underscore and the extension
-        # For "name_.md", this becomes "name"
-        path_component = path_component[:- (len(file_extension) + 1)]
+        # For "name.md", this becomes "name"
+        path_component = path_component[:- (len(file_extension) )]
     
     # 3. Replace all remaining underscores with slashes
-    # For "docs.unity.rc.umass.edu_about.md", this becomes "docs.unity.rc.umass.edu/about"
-    # For "docs.unity.rc.umass.edu_documentation_cluster_specs.md", this becomes "docs.unity.rc.umass.edu/documentation/cluster/specs"
-    cleaned_path = path_component.replace("_", "/")
+    # For "docs.unity.rc.umass.edu!about.md", this becomes "docs.unity.rc.umass.edu/about"
+    # For "docs.unity.rc.umass.edu_!documentation!cluster_specs.md", this becomes "docs.unity.rc.umass.edu/documentation/cluster_specs"
+    cleaned_path = path_component.replace("!", "/")
 
     # 4. Prepend the web protocol
     return f"{web_protocol}{cleaned_path}"
