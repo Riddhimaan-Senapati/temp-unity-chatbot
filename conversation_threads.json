@@ -1,0 +1,111 @@
+{
+  "threads": [
+    {
+      "name": "Introduction",
+      "message": [
+        "What is the Unity HPC?"
+      ]
+    },
+    {
+      "name": "Unity basics",
+      "messages": [
+        "How do I access Unity?",
+        "What resources are available on Unity?"
+      ]
+    },
+    {
+      "name": "Tricky GPU error, driver/update problem",
+      "messages": [
+        "Could you help me with the error I am getting? (ials-gpu007: error: Failed to get device handle for GPU 7: Unknown Error). There is a problem with this GPU too: (ials-gpu008: error: Failed to get device handle for GPU 1: Unknown Error).",
+        "Is Unity Team able to detect these errors automatically, or shall I report all errors I encounter?",
+        "Okay, thanks for the info. I got this other error on an A100 node (gpu023) from job 34002652. The script ran fine when I added --exclude gpu023.\n/usr/local/lib/python3.8/dist-packages/torch/cuda/__init__.py:52: UserWarning: CUDA initialization: Unexpected error from cudaGetDeviceCount(). Did you run some cuda functions before calling NumCudaDevices() that might have already set an error? Error 802: system not yet initialized (Triggered internally at /pytorch/c10/cuda/CUDAFunctions.cpp:109.)\n  return torch._C._cuda_getDeviceCount() > 0\n...\n    assert torch.cuda.is_available()\nAssertionError:"
+      ]
+    },
+    {
+      "name": "Vague question, needs more info from user",
+      "messages": [
+        "Hi there, I'm getting CUDA_HOME not existing error when utilizing gpu in sbatch for models. Could someone guide me on how best to resolve this issue?",
+        "How to do load cuda module in my sbatch script?",
+        "Should I add at the start of every sbatch script?"
+      ]
+    },
+    {
+      "name": "Pytorch GPU OOM",
+      "messages": [
+        "Hi team, I'm getting the following error at some point in my experiments in job 34418381. I'm not sure how to change my configurations to resolve it. Could I get some help with this?\ntorch.OutOfMemoryError: CUDA out of memory. Tried to allocate 2.00 GiB. GPU 0 has a total capacity of 11.91 GiB of which 406.38 MiB is free. Including non-PyTorch memory, this process has 11.51 GiB memory in use. Of the allocated memory 11.18 GiB is allocated by PyTorch, and 219.44 MiB is reserved by PyTorch but unallocated. If reserved but unallocated memory is large try setting PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True to avoid fragmentation. See documentation for Memory Management (https://pytorch.org/docs/stable/notes/cuda.html#environment-variables)"
+      ]
+    },
+    {
+      "name": "Gpu crash",
+      "messages": [
+        "I was running an interactive job with srun and suddenly got these errors:\nslurmstepd-gypsum-gpu182: error: NVML: Failed to get usage(15): GPU is lost\nslurmstepd-gypsum-gpu182: error: NVML: Failed to get Compute running process count(15): GPU is lost\nNot sure what that means, and I'm unable to cancel the job 30185792"
+      ]
+    },
+    {
+      "name": "Issues figuring out how to acquire resources for test runs",
+      "messages": [
+        "Good evening,\nI'm having issues figuring out how I can acquire resources for my test runs.\nI'm trying to run the llama3 70b model that we have locally. I believe that I need 500G of memory on GPU for that job but every time I attempt to run a job with these requests it goes pending for such a long time. I need to run multiple runs in one session to be able to troubleshoot my code and make changes in one working session.\nIs there a chance that I can fix my request somehow to get quicker results? Or is that just how it goes when using this much resources.\nI don't mind sharing the batch script I'm running if that might help.",
+        "What difference is it to use a model that exists locally rather than use one that's online? It must be quicker to run, correct?"
+      ]
+    },
+    {
+      "name": "Disk usage",
+      "messages": [
+        "I am trying to check my disk usage quota - but dont know if its full",
+        "Is it possible to add more space to it?",
+        "Whats the timeline on project space?",
+        "Was just wondering if there was a faster way to move large files? than just using mv?"
+      ]
+    },
+    {
+      "name": "R env",
+      "messages": [
+        "Hi all! Hopefully an easy question - I'm trying to help someone install some R software in an apptainer container. Their software comes with a file called Modular.R that should install everything it needs. I'm not sure yet if this will play nicely with apptainer (optimistic), but so far I can't even figure out how to run it.\n\nIf I load the r-rocker-ml-verse/4.4.0+apptainer module and then run \"Rscript /path/to/Modular.R\" it will run, but Modular.R will fail because /usr/... of course isn't writable. When I try to run \"Rscript /path/to/Modular.R\" within a .def file, however, it gives me a \"cannot open file 'Modular.R': No such file or directory\" error. I can copy the exact path from the error message and it opens the correct file, so the path is specified correctly. What am I doing wrong here?"
+      ]
+    },
+    {
+      "name": "Slash error",
+      "messages": [
+        "Good afternoon.\nI'm having this error on a batch run:\nslurmstepd-uri-cpu014: error: execve(): /var/spool/slurm/slurmd/job37168102/slurm_script: Not a directory"
+      ]
+    },
+    {
+      "name": "Stored datasets",
+      "messages": [
+        "Hi I have a question related to accessing the datasets stored on the unity\nI am currently using VideoMAE-V2, and I see that on unity under the documentations section: https://docs.unity.rc.umass.edu/documentation/datasets/ai/videomae/, it mentions that the dataset is available to use. But I could not find it when I go to /datasets/ai/opengvlab\nCould you please let me know if I am missing anything?\nI am particularly looking for Kinetics400 dataset.\nThanks in Advance.",
+        "Over here: /datasets/ai/opengvlab/hub/models--OpenGVLab--VideoMAEv2-Large/ is it the pre-trained model?\nI was wondering if I can access the large datasets like Kinetics400 dataset if stored on unity?"
+      ]
+    },
+    {
+      "name": "Contact for storage space",
+      "messages": [
+        "Who can I contact regarding increasing storage space for my PI account and the associated costs regarding it?"
+      ]
+    },
+    {
+      "name": "Scratch space",
+      "messages": [
+        "Good morning, How do I know if I have scratch space or apply for some?"
+      ]
+    },
+    {
+      "name": "Upload large pkl files",
+      "messages": [
+        "What is the best way to upload a really large .pkl file?"
+      ]
+    },
+    {
+      "name": "Average wait time",
+      "messages": [
+        "Hey, what's the average wait time on 500G of ram 4 GPU cores for 1 hour? Is there anything I can do to be able request more time to be able to work on and test my project?"
+      ]
+    },
+    {
+      "name": "Install program to directory",
+      "messages": [
+        "Hi, would it be possible for me to install this program on my work directory and any advice on how to go about it?",
+        "Can I get the GUI to show up on the cluster?"
+      ]
+    }
+  ]
+}
