@@ -59,6 +59,7 @@ jobs:
       - name: Create CloudFormation stack if it doesn't exist
         if: steps.check-stack.outputs.stack_exists == 'false'
         run: |
+          echo "Creating CloudFormation stack..."
           aws cloudformation create-stack \
             --stack-name unity-chatbot-stack \
             --template-body file://cloudformation-template.yml \
@@ -67,8 +68,8 @@ jobs:
               ParameterKey=CertificateArn,ParameterValue=${{ secrets.CERTIFICATE_ARN }} \
               ParameterKey=EnvironmentName,ParameterValue=prod \
               ParameterKey=ECRRepositoryName,ParameterValue=${{ secrets.ECR_REPOSITORY || 'unity-chatbot' }} \
-              ParameterKey=ECSClusterName,ParameterValue=${{ secrets.ECS_CLUSTER }} \
-              ParameterKey=ECSServiceName,ParameterValue=${{ secrets.ECS_SERVICE }} \
+              ParameterKey=ECSClusterName,ParameterValue=unity-chatbot-cluster \
+              ParameterKey=ECSServiceName,ParameterValue=unity-chatbot-service \
               ParameterKey=KnowledgeBaseId,ParameterValue=${{ secrets.KNOWLEDGE_BASE_ID || '0G0DQEDJAO' }} \
               ParameterKey=S3BucketName,ParameterValue=${{ secrets.S3_BUCKET_NAME || 'umass-unity-chatbot' }} \
               ParameterKey=S3FolderPrefix,ParameterValue=${{ secrets.S3_FOLDER_PREFIX || 'documents/' }} \
@@ -80,12 +81,41 @@ jobs:
             --capabilities CAPABILITY_IAM
           
           echo "Waiting for stack creation to complete..."
-          aws cloudformation wait stack-create-complete --stack-name unity-chatbot-stack
+          
+          # Monitor stack events during creation
+          start_time=$(date +%s)
+          while true; do
+            status=$(aws cloudformation describe-stacks --stack-name unity-chatbot-stack --query "Stacks[0].StackStatus" --output text)
+            echo "Current stack status: $status"
+            
+            # Get and display recent events
+            echo "Recent stack events:"
+            aws cloudformation describe-stack-events --stack-name unity-chatbot-stack --query "StackEvents[0:5].[LogicalResourceId,ResourceStatus,ResourceStatusReason]" --output table
+            
+            if [[ "$status" == "CREATE_COMPLETE" ]]; then
+              echo "Stack creation completed successfully!"
+              break
+            elif [[ "$status" == *"FAILED"* ]]; then
+              echo "Stack creation failed!"
+              aws cloudformation describe-stack-events --stack-name unity-chatbot-stack --query "StackEvents[?ResourceStatus=='CREATE_FAILED'].[LogicalResourceId,ResourceStatusReason]" --output table
+              exit 1
+            fi
+            
+            # Check if we've been waiting too long (30 minutes)
+            current_time=$(date +%s)
+            if (( current_time - start_time > 1800 )); then
+              echo "Timeout waiting for stack creation!"
+              exit 1
+            fi
+            
+            sleep 30
+          done
       
       - name: Update CloudFormation stack if it exists
         if: steps.check-stack.outputs.stack_exists == 'true'
         run: |
-          aws cloudformation update-stack \
+          echo "Updating CloudFormation stack..."
+          update_output=$(aws cloudformation update-stack \
             --stack-name unity-chatbot-stack \
             --template-body file://cloudformation-template.yml \
             --parameters \
@@ -93,8 +123,8 @@ jobs:
               ParameterKey=CertificateArn,ParameterValue=${{ secrets.CERTIFICATE_ARN }} \
               ParameterKey=EnvironmentName,ParameterValue=prod \
               ParameterKey=ECRRepositoryName,ParameterValue=${{ secrets.ECR_REPOSITORY || 'unity-chatbot' }} \
-              ParameterKey=ECSClusterName,ParameterValue=${{ secrets.ECS_CLUSTER || 'unity-chatbot-cluster' }} \
-              ParameterKey=ECSServiceName,ParameterValue=${{ secrets.ECS_SERVICE || 'unity-chatbot-service' }} \
+              ParameterKey=ECSClusterName,ParameterValue=unity-chatbot-cluster \
+              ParameterKey=ECSServiceName,ParameterValue=unity-chatbot-service \
               ParameterKey=KnowledgeBaseId,ParameterValue=${{ secrets.KNOWLEDGE_BASE_ID || '0G0DQEDJAO' }} \
               ParameterKey=S3BucketName,ParameterValue=${{ secrets.S3_BUCKET_NAME || 'umass-unity-chatbot' }} \
               ParameterKey=S3FolderPrefix,ParameterValue=${{ secrets.S3_FOLDER_PREFIX || 'documents/' }} \
@@ -103,19 +133,51 @@ jobs:
               ParameterKey=SlackBotToken,ParameterValue=${{ secrets.SLACK_BOT_TOKEN || '' }} \
               ParameterKey=SlackAppToken,ParameterValue=${{ secrets.SLACK_APP_TOKEN || '' }} \
               ParameterKey=DesiredCount,ParameterValue=1 \
-            --capabilities CAPABILITY_IAM || echo "No updates to be performed"
+            --capabilities CAPABILITY_IAM 2>&1) || echo "No updates to be performed"
           
-          # Wait for stack update to complete if an update was performed
-          if [ $? -eq 0 ]; then
-            echo "Waiting for stack update to complete..."
-            aws cloudformation wait stack-update-complete --stack-name unity-chatbot-stack
+          echo "$update_output"
+          
+          # Check if an update is actually happening
+          if [[ "$update_output" != *"No updates"* ]]; then
+            echo "Stack update initiated. Monitoring progress..."
+            
+            # Monitor stack events during update
+            start_time=$(date +%s)
+            while true; do
+              status=$(aws cloudformation describe-stacks --stack-name unity-chatbot-stack --query "Stacks[0].StackStatus" --output text)
+              echo "Current stack status: $status"
+              
+              # Get and display recent events
+              echo "Recent stack events:"
+              aws cloudformation describe-stack-events --stack-name unity-chatbot-stack --query "StackEvents[0:5].[LogicalResourceId,ResourceStatus,ResourceStatusReason]" --output table
+              
+              if [[ "$status" == "UPDATE_COMPLETE" ]]; then
+                echo "Stack update completed successfully!"
+                break
+              elif [[ "$status" == *"FAILED"* || "$status" == *"ROLLBACK"* ]]; then
+                echo "Stack update failed or is rolling back!"
+                aws cloudformation describe-stack-events --stack-name unity-chatbot-stack --query "StackEvents[?contains(ResourceStatus, 'FAILED')].[LogicalResourceId,ResourceStatus,ResourceStatusReason]" --output table
+                break
+              fi
+              
+              # Check if we've been waiting too long (30 minutes)
+              current_time=$(date +%s)
+              if (( current_time - start_time > 1800 )); then
+                echo "Timeout waiting for stack update!"
+                break
+              fi
+              
+              sleep 30
+            done
+          else
+            echo "No updates to be performed on the CloudFormation stack."
           fi
       
       - name: Check if ECS service exists
         id: check-service
         run: |
-          CLUSTER="${{ secrets.ECS_CLUSTER || 'unity-chatbot-cluster' }}"
-          SERVICE="${{ secrets.ECS_SERVICE || 'unity-chatbot-service' }}"
+          CLUSTER="unity-chatbot-cluster"
+          SERVICE="unity-chatbot-service"
           if aws ecs describe-services --cluster $CLUSTER --services $SERVICE | grep -q "MISSING"; then
             echo "service_exists=false" >> $GITHUB_OUTPUT
           else
@@ -125,6 +187,6 @@ jobs:
       - name: Deploy to ECS
         if: steps.check-service.outputs.service_exists == 'true'
         run: |
-          aws ecs update-service --cluster ${{ secrets.ECS_CLUSTER || 'unity-chatbot-cluster' }} \
-                                --service ${{ secrets.ECS_SERVICE || 'unity-chatbot-service' }} \
+          aws ecs update-service --cluster unity-chatbot-cluster \
+                                --service unity-chatbot-service \
                                 --force-new-deployment
