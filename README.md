@@ -21,6 +21,10 @@ This is the code repository for the RAG chatbot based on the Unity HPC documenta
 │ └── claude_comparison_results.md
 ├── documents/
 │ └── (Contains scraped Unity HPC documentation in Markdown files)
+├── .github/
+│ └── workflows/
+│     └── deploy.yml
+├── cloudformation-template.yml
 ├── .dockerignore
 ├── docker-compose.yaml
 ├── Dockerfile
@@ -48,13 +52,48 @@ This is the code repository for the RAG chatbot based on the Unity HPC documenta
     *   **`test_results/claude_comparison_results.md`**: A human-readable Markdown report summarizing the comparison results, with Claude 3.7 sonnet.
 *   **`documents/`**: This directory stores the scraped documentation in Markdown format, which serves as the knowledge base for the RAG chatbot.
 *   **`.dockerignore`**: Specifies files and directories that should be ignored by Docker when building images, similar to `.gitignore`.
-*   **`docker-compose.yaml`**: A Docker Compose configuration file that defines how to run the multi-container Docker application, including the Streamlit app.
 *   **`Dockerfile`**: Defines the steps to build the Docker image for the chatbot application, specifying the base image, dependencies, and application setup.
 *   **`.env.example`**: Template for the .env file without any of the key values.
 *   **`requirements.txt`**: Lists all the Python dependencies required to run the chatbot application, used for `pip install`.
 *   **`LICENSE`**: The license file for the project.
 *   **`.gitignore`**: Specifies files and directories that Git should ignore.
+*   **`.github/workflows/deploy.yml`**: GitHub Actions workflow file that automates the CI/CD pipeline for deploying the application to AWS. It builds and pushes the Docker image to Amazon ECR, and deploys the application using CloudFormation.
+*   **`cloudformation-template.yml`**: AWS CloudFormation template that defines the infrastructure as code, including VPC, ECS cluster, load balancer, and other AWS resources needed to run the application in the cloud.
 
+
+# Deployment to AWS
+
+The application can be automatically deployed to AWS using the GitHub Actions workflow and CloudFormation template included in this repository.
+
+## Prerequisites for AWS Deployment
+
+1. AWS account with appropriate permissions
+2. The following secrets configured in your GitHub repository:
+   - `AWS_ACCESS_KEY_ID`: Your AWS access key
+   - `AWS_SECRET_ACCESS_KEY`: Your AWS secret key
+   - `AWS_REGION`: The AWS region to deploy to
+   - `DOMAIN_NAME`: Domain name for the application
+   - `CERTIFICATE_ARN`: ARN of the SSL certificate for HTTPS
+   - Other optional secrets as defined in the deploy.yml file
+
+## Deployment Process
+
+The deployment process is automated through GitHub Actions and happens when:
+- Code is pushed to the main branch
+- The workflow is manually triggered
+
+The workflow:
+1. Builds the Docker image
+2. Pushes it to Amazon ECR
+3. Creates or updates the CloudFormation stack
+4. Deploys the application to ECS
+
+The CloudFormation template provisions all necessary AWS resources including:
+- VPC and networking components
+- ECS cluster and service
+- Application Load Balancer
+- IAM roles and policies
+- CloudWatch logs
 
 # Installation and usage(for the streamlit chatbot and dashboard)
 
