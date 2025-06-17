@@ -395,16 +395,17 @@ Resources:
                 Resource:
                   - !Sub "arn:aws:s3:::${S3BucketName}"
                   - !Sub "arn:aws:s3:::${S3BucketName}/*"
-        - PolicyName: SSMParameterAccess
+        - PolicyName: BedrockAccess
           PolicyDocument:
             Version: '2012-10-17'
             Statement:
               - Effect: Allow
                 Action:
-                  - ssm:GetParameter
-                  - ssm:GetParameters
-                Resource:
-                  - !Sub "arn:aws:ssm:${AWS::Region}:${AWS::AccountId}:parameter/unity-slackbot/*"
+                  - bedrock:*
+                  - bedrock-runtime:*
+                  - bedrock-agent:*
+                  - bedrock-agent-runtime:*
+                Resource: "*"
         - PolicyName: SecretsManagerAccess
           PolicyDocument:
             Version: '2012-10-17'
