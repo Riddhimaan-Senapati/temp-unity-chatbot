@@ -1,0 +1,112 @@
+name: Deploy Unity Chatbot
+
+on:
+  push:
+    branches: [ main ]
+  workflow_dispatch:
+
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+      
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v2
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ secrets.AWS_REGION }}
+      
+      - name: Login to Amazon ECR
+        id: login-ecr
+        uses: aws-actions/amazon-ecr-login@v1
+      
+      - name: Ensure ECR repository exists
+        env:
+          ECR_REPOSITORY: ${{ secrets.ECR_REPOSITORY || 'unity-chatbot' }}
+        run: |
+          # Check if repository exists, create if it doesn't
+          if ! aws ecr describe-repositories --repository-names $ECR_REPOSITORY 2>/dev/null; then
+            echo "Creating ECR repository $ECR_REPOSITORY"
+            aws ecr create-repository --repository-name $ECR_REPOSITORY
+          else
+            echo "ECR repository $ECR_REPOSITORY already exists"
+          fi
+      
+      - name: Build, tag, and push image to Amazon ECR
+        env:
+          ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
+          ECR_REPOSITORY: ${{ secrets.ECR_REPOSITORY || 'unity-chatbot' }}
+          IMAGE_TAG: ${{ github.sha }}
+        run: |
+          docker build -t $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG .
+          docker push $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG
+          docker tag $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG $ECR_REGISTRY/$ECR_REPOSITORY:latest
+          docker push $ECR_REGISTRY/$ECR_REPOSITORY:latest
+      
+      - name: Check if CloudFormation stack exists
+        id: check-stack
+        run: |
+          if aws cloudformation describe-stacks --stack-name unity-chatbot-stack 2>&1 | grep -q "Stack with id unity-chatbot-stack does not exist"; then
+            echo "stack_exists=false" >> $GITHUB_OUTPUT
+          else
+            echo "stack_exists=true" >> $GITHUB_OUTPUT
+          fi
+      
+      - name: Create CloudFormation stack if it doesn't exist
+        if: steps.check-stack.outputs.stack_exists == 'false'
+        run: |
+          aws cloudformation create-stack \
+            --stack-name unity-chatbot-stack \
+            --template-body file://cloudformation-template.yml \
+            --parameters \
+              ParameterKey=DomainName,ParameterValue=${{ secrets.DOMAIN_NAME }} \
+              ParameterKey=CertificateArn,ParameterValue=${{ secrets.CERTIFICATE_ARN }} \
+              ParameterKey=EnvironmentName,ParameterValue=prod \
+              ParameterKey=ECRRepositoryName,ParameterValue=${{ secrets.ECR_REPOSITORY }} \
+              ParameterKey=ECSClusterName,ParameterValue=${{ secrets.ECS_CLUSTER }} \
+              ParameterKey=ECSServiceName,ParameterValue=${{ secrets.ECS_SERVICE }} \
+              ParameterKey=KnowledgeBaseId,ParameterValue=${{ secrets.KNOWLEDGE_BASE_ID || '0G0DQEDJAO' }} \
+              ParameterKey=S3BucketName,ParameterValue=${{ secrets.S3_BUCKET_NAME || 'umass-unity-chatbot' }} \
+              ParameterKey=S3FolderPrefix,ParameterValue=${{ secrets.S3_FOLDER_PREFIX || 'documents/' }} \
+              ParameterKey=UnityUsername,ParameterValue=${{ secrets.UNITY_USERNAME || 'unity_team' }} \
+              ParameterKey=UnityPassword,ParameterValue=${{ secrets.UNITY_PASSWORD || '123' }} \
+              ParameterKey=SlackBotToken,ParameterValue=${{ secrets.SLACK_BOT_TOKEN || '' }} \
+              ParameterKey=SlackAppToken,ParameterValue=${{ secrets.SLACK_APP_TOKEN || '' }} \
+              ParameterKey=DesiredCount,ParameterValue=1 \
+            --capabilities CAPABILITY_IAM
+          
+          echo "Waiting for stack creation to complete..."
+          aws cloudformation wait stack-create-complete --stack-name unity-chatbot-stack
+      
+      - name: Update CloudFormation stack if it exists
+        if: steps.check-stack.outputs.stack_exists == 'true'
+        run: |
+          aws cloudformation update-stack \
+            --stack-name unity-chatbot-stack \
+            --template-body file://cloudformation-template.yml \
+            --parameters \
+              ParameterKey=DomainName,ParameterValue=${{ secrets.DOMAIN_NAME }} \
+              ParameterKey=CertificateArn,ParameterValue=${{ secrets.CERTIFICATE_ARN }} \
+              ParameterKey=EnvironmentName,ParameterValue=prod \
+              ParameterKey=ECRRepositoryName,ParameterValue=${{ secrets.ECR_REPOSITORY }} \
+              ParameterKey=ECSClusterName,ParameterValue=${{ secrets.ECS_CLUSTER }} \
+              ParameterKey=ECSServiceName,ParameterValue=${{ secrets.ECS_SERVICE }} \
+              ParameterKey=KnowledgeBaseId,ParameterValue=${{ secrets.KNOWLEDGE_BASE_ID || '0G0DQEDJAO' }} \
+              ParameterKey=S3BucketName,ParameterValue=${{ secrets.S3_BUCKET_NAME || 'umass-unity-chatbot' }} \
+              ParameterKey=S3FolderPrefix,ParameterValue=${{ secrets.S3_FOLDER_PREFIX || 'documents/' }} \
+              ParameterKey=UnityUsername,ParameterValue=${{ secrets.UNITY_USERNAME || 'unity_team' }} \
+              ParameterKey=UnityPassword,ParameterValue=${{ secrets.UNITY_PASSWORD || '123' }} \
+              ParameterKey=SlackBotToken,ParameterValue=${{ secrets.SLACK_BOT_TOKEN || '' }} \
+              ParameterKey=SlackAppToken,ParameterValue=${{ secrets.SLACK_APP_TOKEN || '' }} \
+              ParameterKey=DesiredCount,ParameterValue=1 \
+            --capabilities CAPABILITY_IAM || echo "No updates to be performed"
+      
+      - name: Deploy to ECS
+        run: |
+          aws ecs update-service --cluster ${{ secrets.ECS_CLUSTER || 'unity-chatbot-cluster' }} \
+                                --service ${{ secrets.ECS_SERVICE || 'unity-chatbot-service' }} \
+                                --force-new-deployment
