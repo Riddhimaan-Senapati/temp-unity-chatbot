@@ -1,6 +1,9 @@
 AWSTemplateFormatVersion: '2010-09-09'
 Description: 'CloudFormation template for Unity Chatbot infrastructure'
 
+Conditions:
+  HasECRRepositoryName: !Not [!Equals [!Ref ECRRepositoryName, '']]
+
 Parameters:
   DomainName:
     Type: String
@@ -220,7 +223,7 @@ Resources:
   ECRRepository:
     Type: AWS::ECR::Repository
     Properties:
-      RepositoryName: !Ref ECRRepositoryName
+      RepositoryName: !If [HasECRRepositoryName, !Ref ECRRepositoryName, 'unity-chatbot']
       ImageScanningConfiguration:
         ScanOnPush: true
       Tags:
