@@ -66,8 +66,16 @@ jobs:
           ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
           ECR_REPOSITORY: ${{ secrets.SLACKBOT_ECR_REPOSITORY || 'unity-slackbot' }}
           IMAGE_TAG: ${{ github.sha }}
+          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          AWS_REGION: ${{ secrets.AWS_REGION }}
         run: |
-          docker build -t $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG -f slackbot_dockerfile .
+          # Build with AWS credentials passed as build arguments
+          docker build \
+            --build-arg AWS_ACCESS_KEY_ID=$AWS_ACCESS_KEY_ID \
+            --build-arg AWS_SECRET_ACCESS_KEY=$AWS_SECRET_ACCESS_KEY \
+            --build-arg AWS_REGION=$AWS_REGION \
+            -t $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG -f slackbot_dockerfile .
           docker push $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG
           docker tag $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG $ECR_REGISTRY/$ECR_REPOSITORY:latest
           docker push $ECR_REGISTRY/$ECR_REPOSITORY:latest
@@ -104,7 +112,7 @@ jobs:
               ParameterKey=SlackBotToken,ParameterValue=${{ secrets.SLACK_BOT_TOKEN || '' }} \
               ParameterKey=SlackAppToken,ParameterValue=${{ secrets.SLACK_APP_TOKEN || '' }} \
               ParameterKey=DesiredCount,ParameterValue=1 \
-            --capabilities CAPABILITY_IAM
+            --capabilities CAPABILITY_IAM CAPABILITY_NAMED_IAM
           
           echo "Waiting for stack creation to complete..."
           
@@ -159,7 +167,7 @@ jobs:
               ParameterKey=SlackBotToken,ParameterValue=${{ secrets.SLACK_BOT_TOKEN || '' }} \
               ParameterKey=SlackAppToken,ParameterValue=${{ secrets.SLACK_APP_TOKEN || '' }} \
               ParameterKey=DesiredCount,ParameterValue=1 \
-            --capabilities CAPABILITY_IAM 2>&1) || echo "No updates to be performed"
+            --capabilities CAPABILITY_IAM CAPABILITY_NAMED_IAM 2>&1) || echo "No updates to be performed"
           
           echo "$update_output"
           
@@ -229,7 +237,7 @@ jobs:
               ParameterKey=SlackBotToken,ParameterValue=${{ secrets.SLACK_BOT_TOKEN || '' }} \
               ParameterKey=SlackAppToken,ParameterValue=${{ secrets.SLACK_APP_TOKEN || '' }} \
               ParameterKey=DesiredCount,ParameterValue=1 \
-            --capabilities CAPABILITY_IAM
+            --capabilities CAPABILITY_IAM CAPABILITY_NAMED_IAM
           
           echo "Waiting for stack creation to complete..."
           
@@ -282,7 +290,7 @@ jobs:
               ParameterKey=SlackBotToken,ParameterValue=${{ secrets.SLACK_BOT_TOKEN || '' }} \
               ParameterKey=SlackAppToken,ParameterValue=${{ secrets.SLACK_APP_TOKEN || '' }} \
               ParameterKey=DesiredCount,ParameterValue=1 \
-            --capabilities CAPABILITY_IAM 2>&1) || echo "No updates to be performed"
+            --capabilities CAPABILITY_IAM CAPABILITY_NAMED_IAM 2>&1) || echo "No updates to be performed"
           
           echo "$update_output"
           
