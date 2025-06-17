@@ -306,6 +306,10 @@ Resources:
           Environment:
             - Name: AWS_REGION
               Value: !Ref AWS::Region
+            - Name: AWS_ACCESS_KEY_ID
+              Value: '{{resolve:ssm:/unity-slackbot/aws-access-key-id:1}}'
+            - Name: AWS_SECRET_ACCESS_KEY
+              Value: '{{resolve:ssm:/unity-slackbot/aws-secret-access-key:1}}'
             - Name: KNOWLEDGE_BASE_ID
               Value: !Ref KnowledgeBaseId
             - Name: S3_BUCKET_NAME
@@ -391,6 +395,16 @@ Resources:
                 Resource:
                   - !Sub "arn:aws:s3:::${S3BucketName}"
                   - !Sub "arn:aws:s3:::${S3BucketName}/*"
+        - PolicyName: SSMParameterAccess
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - ssm:GetParameter
+                  - ssm:GetParameters
+                Resource:
+                  - !Sub "arn:aws:ssm:${AWS::Region}:${AWS::AccountId}:parameter/unity-slackbot/*"
         - PolicyName: SecretsManagerAccess
           PolicyDocument:
             Version: '2012-10-17'
