@@ -93,8 +93,8 @@ jobs:
               ParameterKey=CertificateArn,ParameterValue=${{ secrets.CERTIFICATE_ARN }} \
               ParameterKey=EnvironmentName,ParameterValue=prod \
               ParameterKey=ECRRepositoryName,ParameterValue=${{ secrets.ECR_REPOSITORY || 'unity-chatbot' }} \
-              ParameterKey=ECSClusterName,ParameterValue=${{ secrets.ECS_CLUSTER }} \
-              ParameterKey=ECSServiceName,ParameterValue=${{ secrets.ECS_SERVICE }} \
+              ParameterKey=ECSClusterName,ParameterValue=${{ secrets.ECS_CLUSTER || 'unity-chatbot-cluster' }} \
+              ParameterKey=ECSServiceName,ParameterValue=${{ secrets.ECS_SERVICE || 'unity-chatbot-service' }} \
               ParameterKey=KnowledgeBaseId,ParameterValue=${{ secrets.KNOWLEDGE_BASE_ID || '0G0DQEDJAO' }} \
               ParameterKey=S3BucketName,ParameterValue=${{ secrets.S3_BUCKET_NAME || 'umass-unity-chatbot' }} \
               ParameterKey=S3FolderPrefix,ParameterValue=${{ secrets.S3_FOLDER_PREFIX || 'documents/' }} \
@@ -104,8 +104,26 @@ jobs:
               ParameterKey=SlackAppToken,ParameterValue=${{ secrets.SLACK_APP_TOKEN || '' }} \
               ParameterKey=DesiredCount,ParameterValue=1 \
             --capabilities CAPABILITY_IAM || echo "No updates to be performed"
+          
+          # Wait for stack update to complete if an update was performed
+          if [ $? -eq 0 ]; then
+            echo "Waiting for stack update to complete..."
+            aws cloudformation wait stack-update-complete --stack-name unity-chatbot-stack
+          fi
+      
+      - name: Check if ECS service exists
+        id: check-service
+        run: |
+          CLUSTER="${{ secrets.ECS_CLUSTER || 'unity-chatbot-cluster' }}"
+          SERVICE="${{ secrets.ECS_SERVICE || 'unity-chatbot-service' }}"
+          if aws ecs describe-services --cluster $CLUSTER --services $SERVICE | grep -q "MISSING"; then
+            echo "service_exists=false" >> $GITHUB_OUTPUT
+          else
+            echo "service_exists=true" >> $GITHUB_OUTPUT
+          fi
       
       - name: Deploy to ECS
+        if: steps.check-service.outputs.service_exists == 'true'
         run: |
           aws ecs update-service --cluster ${{ secrets.ECS_CLUSTER || 'unity-chatbot-cluster' }} \
                                 --service ${{ secrets.ECS_SERVICE || 'unity-chatbot-service' }} \
