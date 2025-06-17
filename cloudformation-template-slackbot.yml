@@ -1,0 +1,412 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: 'CloudFormation template for Unity Slack Bot infrastructure'
+
+Parameters:
+  EnvironmentName:
+    Type: String
+    Default: "prod"
+    Description: Environment name (e.g., dev, test, prod)
+    
+  ProjectTag:
+    Type: String
+    Default: "ai4cw"
+    Description: Project tag value for all resources
+    
+  ECRRepositoryName:
+    Type: String
+    Default: "unity-slackbot"
+    Description: Name of the ECR repository
+    
+  ECSClusterName:
+    Type: String
+    Default: "unity-slackbot-cluster"
+    Description: Name of the ECS cluster
+    
+  ECSServiceName:
+    Type: String
+    Default: "unity-slackbot-service"
+    Description: Name of the ECS service
+    
+  TaskDefinitionFamily:
+    Type: String
+    Default: "unity-slackbot-task"
+    Description: Family name for the task definition
+    
+  ContainerName:
+    Type: String
+    Default: "unity-slackbot"
+    Description: Name of the container
+    
+  TaskCPU:
+    Type: String
+    Default: "256"
+    Description: CPU units for the task
+    
+  TaskMemory:
+    Type: String
+    Default: "512"
+    Description: Memory for the task in MB
+    
+  S3BucketName:
+    Type: String
+    Default: "umass-unity-chatbot"
+    Description: Name of the S3 bucket for documents
+    
+  LogRetentionDays:
+    Type: Number
+    Default: 14
+    Description: Number of days to retain CloudWatch logs
+    
+  DesiredCount:
+    Type: Number
+    Default: 1
+    Description: Desired count of tasks for the ECS service
+    
+  KnowledgeBaseId:
+    Type: String
+    Default: "0G0DQEDJAO"
+    Description: ID of the AWS Bedrock Knowledge Base
+    
+  S3FolderPrefix:
+    Type: String
+    Default: "documents/"
+    Description: Folder prefix in the S3 bucket
+    
+  UnityUsername:
+    Type: String
+    Default: "unity_team"
+    Description: Username for Unity authentication
+    
+  UnityPassword:
+    Type: String
+    Default: "123"
+    Description: Password for Unity authentication
+    NoEcho: true
+    
+  SlackBotToken:
+    Type: String
+    Default: ""
+    Description: Slack Bot Token
+    NoEcho: true
+    
+  SlackAppToken:
+    Type: String
+    Default: ""
+    Description: Slack App Token
+    NoEcho: true
+
+Resources:
+  # VPC and Networking
+  VPC:
+    Type: AWS::EC2::VPC
+    Properties:
+      CidrBlock: 10.1.0.0/16
+      EnableDnsSupport: true
+      EnableDnsHostnames: true
+      Tags:
+        - Key: Name
+          Value: UnitySlackBotVPC
+        - Key: PROJECT
+          Value: !Ref ProjectTag
+
+  PrivateSubnet1:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref VPC
+      AvailabilityZone: !Select [0, !GetAZs '']
+      CidrBlock: 10.1.1.0/24
+      MapPublicIpOnLaunch: false
+      Tags:
+        - Key: Name
+          Value: UnitySlackBot-Private-Subnet-1
+        - Key: PROJECT
+          Value: !Ref ProjectTag
+
+  PrivateSubnet2:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref VPC
+      AvailabilityZone: !Select [1, !GetAZs '']
+      CidrBlock: 10.1.2.0/24
+      MapPublicIpOnLaunch: false
+      Tags:
+        - Key: Name
+          Value: UnitySlackBot-Private-Subnet-2
+        - Key: PROJECT
+          Value: !Ref ProjectTag
+
+  # For outbound internet access
+  PublicSubnet1:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref VPC
+      AvailabilityZone: !Select [0, !GetAZs '']
+      CidrBlock: 10.1.3.0/24
+      MapPublicIpOnLaunch: true
+      Tags:
+        - Key: Name
+          Value: UnitySlackBot-Public-Subnet-1
+        - Key: PROJECT
+          Value: !Ref ProjectTag
+
+  PublicSubnet2:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref VPC
+      AvailabilityZone: !Select [1, !GetAZs '']
+      CidrBlock: 10.1.4.0/24
+      MapPublicIpOnLaunch: true
+      Tags:
+        - Key: Name
+          Value: UnitySlackBot-Public-Subnet-2
+        - Key: PROJECT
+          Value: !Ref ProjectTag
+
+  InternetGateway:
+    Type: AWS::EC2::InternetGateway
+    Properties:
+      Tags:
+        - Key: Name
+          Value: UnitySlackBot-IGW
+        - Key: PROJECT
+          Value: !Ref ProjectTag
+
+  AttachGateway:
+    Type: AWS::EC2::VPCGatewayAttachment
+    Properties:
+      VpcId: !Ref VPC
+      InternetGatewayId: !Ref InternetGateway
+
+  PublicRouteTable:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId: !Ref VPC
+      Tags:
+        - Key: Name
+          Value: UnitySlackBot-Public-RT
+        - Key: PROJECT
+          Value: !Ref ProjectTag
+
+  PublicRoute:
+    Type: AWS::EC2::Route
+    DependsOn: AttachGateway
+    Properties:
+      RouteTableId: !Ref PublicRouteTable
+      DestinationCidrBlock: 0.0.0.0/0
+      GatewayId: !Ref InternetGateway
+
+  PublicSubnet1RouteTableAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId: !Ref PublicSubnet1
+      RouteTableId: !Ref PublicRouteTable
+
+  PublicSubnet2RouteTableAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId: !Ref PublicSubnet2
+      RouteTableId: !Ref PublicRouteTable
+
+  # NAT Gateway for private subnets
+  NatGatewayEIP:
+    Type: AWS::EC2::EIP
+    DependsOn: AttachGateway
+    Properties:
+      Domain: vpc
+
+  NatGateway:
+    Type: AWS::EC2::NatGateway
+    Properties:
+      AllocationId: !GetAtt NatGatewayEIP.AllocationId
+      SubnetId: !Ref PublicSubnet1
+      Tags:
+        - Key: Name
+          Value: UnitySlackBot-NAT
+        - Key: PROJECT
+          Value: !Ref ProjectTag
+
+  PrivateRouteTable:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId: !Ref VPC
+      Tags:
+        - Key: Name
+          Value: UnitySlackBot-Private-RT
+        - Key: PROJECT
+          Value: !Ref ProjectTag
+
+  PrivateRoute:
+    Type: AWS::EC2::Route
+    Properties:
+      RouteTableId: !Ref PrivateRouteTable
+      DestinationCidrBlock: 0.0.0.0/0
+      NatGatewayId: !Ref NatGateway
+
+  PrivateSubnet1RouteTableAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId: !Ref PrivateSubnet1
+      RouteTableId: !Ref PrivateRouteTable
+
+  PrivateSubnet2RouteTableAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId: !Ref PrivateSubnet2
+      RouteTableId: !Ref PrivateRouteTable
+
+  # Security Groups
+  ECSSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Security group for ECS tasks
+      VpcId: !Ref VPC
+      SecurityGroupEgress:
+        - IpProtocol: -1
+          CidrIp: 0.0.0.0/0
+      Tags:
+        - Key: PROJECT
+          Value: !Ref ProjectTag
+
+  # ECS Cluster
+  ECSCluster:
+    Type: AWS::ECS::Cluster
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
+    Properties:
+      ClusterName: "unity-slackbot-cluster"
+      Tags:
+        - Key: PROJECT
+          Value: !Ref ProjectTag
+
+  # Task Definition
+  TaskDefinition:
+    Type: AWS::ECS::TaskDefinition
+    Properties:
+      Family: !Ref TaskDefinitionFamily
+      Cpu: !Ref TaskCPU
+      Memory: !Ref TaskMemory
+      NetworkMode: awsvpc
+      RequiresCompatibilities:
+        - FARGATE
+      ExecutionRoleArn: !GetAtt ECSTaskExecutionRole.Arn
+      TaskRoleArn: !GetAtt ECSTaskRole.Arn
+      Tags:
+        - Key: PROJECT
+          Value: !Ref ProjectTag
+      ContainerDefinitions:
+        - Name: !Ref ContainerName
+          Image: !Sub "${AWS::AccountId}.dkr.ecr.${AWS::Region}.amazonaws.com/${ECRRepositoryName}:latest"
+          Essential: true
+          LogConfiguration:
+            LogDriver: awslogs
+            Options:
+              awslogs-group: !Ref CloudWatchLogsGroup
+              awslogs-region: !Ref AWS::Region
+              awslogs-stream-prefix: ecs
+          Environment:
+            - Name: AWS_REGION
+              Value: !Ref AWS::Region
+            - Name: KNOWLEDGE_BASE_ID
+              Value: !Ref KnowledgeBaseId
+            - Name: S3_BUCKET_NAME
+              Value: !Ref S3BucketName
+            - Name: S3_FOLDER_PREFIX
+              Value: !Ref S3FolderPrefix
+            - Name: UNITY_USERNAME
+              Value: !Ref UnityUsername
+            - Name: UNITY_PASSWORD
+              Value: !Ref UnityPassword
+            - Name: SLACK_BOT_TOKEN
+              Value: !Ref SlackBotToken
+            - Name: SLACK_APP_TOKEN
+              Value: !Ref SlackAppToken
+
+  # ECS Service
+  ECSService:
+    Type: AWS::ECS::Service
+    DeletionPolicy: Delete
+    UpdateReplacePolicy: Delete
+    Properties:
+      ServiceName: "unity-slackbot-service"
+      Cluster: !Ref ECSCluster
+      TaskDefinition: !Ref TaskDefinition
+      DesiredCount: !Ref DesiredCount
+      LaunchType: FARGATE
+      Tags:
+        - Key: PROJECT
+          Value: !Ref ProjectTag
+      NetworkConfiguration:
+        AwsvpcConfiguration:
+          AssignPublicIp: ENABLED
+          SecurityGroups:
+            - !Ref ECSSecurityGroup
+          Subnets:
+            - !Ref PublicSubnet1
+            - !Ref PublicSubnet2
+
+  # IAM Roles
+  ECSTaskExecutionRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: ecs-tasks.amazonaws.com
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AmazonECSTaskExecutionRolePolicy
+        - arn:aws:iam::aws:policy/AmazonS3ReadOnlyAccess
+      Tags:
+        - Key: PROJECT
+          Value: !Ref ProjectTag
+
+  ECSTaskRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: ecs-tasks.amazonaws.com
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/AmazonBedrockFullAccess
+      Tags:
+        - Key: PROJECT
+          Value: !Ref ProjectTag
+      Policies:
+        - PolicyName: S3BucketAccess
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - s3:GetObject
+                  - s3:PutObject
+                  - s3:ListBucket
+                  - s3:DeleteObject
+                Resource:
+                  - !Sub "arn:aws:s3:::${S3BucketName}"
+                  - !Sub "arn:aws:s3:::${S3BucketName}/*"
+
+  # CloudWatch Logs
+  CloudWatchLogsGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Sub "/ecs/${ContainerName}"
+      RetentionInDays: !Ref LogRetentionDays
+      Tags:
+        - Key: PROJECT
+          Value: !Ref ProjectTag
+
+Outputs:
+  ECSClusterName:
+    Description: Name of the ECS Cluster
+    Value: !Ref ECSCluster
+  
+  ECSServiceName:
+    Description: Name of the ECS Service
+    Value: !Ref ECSService
