@@ -223,8 +223,10 @@ Resources:
   # ECS Cluster
   ECSCluster:
     Type: AWS::ECS::Cluster
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
     Properties:
-      ClusterName: !Ref ECSClusterName
+      ClusterName: "unity-chatbot-cluster"
       Tags:
         - Key: PROJECT
           Value: !Ref ProjectTag
@@ -280,8 +282,10 @@ Resources:
   ECSService:
     Type: AWS::ECS::Service
     DependsOn: ALBListener
+    DeletionPolicy: Delete
+    UpdateReplacePolicy: Delete
     Properties:
-      ServiceName: !Ref ECSServiceName
+      ServiceName: "unity-chatbot-service"
       Cluster: !Ref ECSCluster
       TaskDefinition: !Ref TaskDefinition
       DesiredCount: !Ref DesiredCount
