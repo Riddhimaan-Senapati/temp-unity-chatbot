@@ -7,9 +7,18 @@ WORKDIR /app
 # Copy the requirements file into the container
 COPY requirements.txt .
 
-# Install any dependencies
-# The --no-cache-dir option prevents caching of the packages, which helps reduce the size of the Docker image.
-RUN pip install --no-cache-dir -r requirements.txt
+# Install build dependencies and Python packages
+RUN apk add --no-cache --virtual .build-deps \
+    gcc \
+    musl-dev \
+    python3-dev \
+    linux-headers \
+    libffi-dev \
+    openssl-dev \
+    jpeg-dev \
+    zlib-dev \
+    && pip install --no-cache-dir -r requirements.txt \
+    && apk del .build-deps
 
 # Copy the Streamlit app files into the container
 COPY . .
