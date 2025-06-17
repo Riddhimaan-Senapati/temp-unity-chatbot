@@ -66,7 +66,7 @@ jobs:
               ParameterKey=DomainName,ParameterValue=${{ secrets.DOMAIN_NAME }} \
               ParameterKey=CertificateArn,ParameterValue=${{ secrets.CERTIFICATE_ARN }} \
               ParameterKey=EnvironmentName,ParameterValue=prod \
-              ParameterKey=ECRRepositoryName,ParameterValue=${{ secrets.ECR_REPOSITORY }} \
+              ParameterKey=ECRRepositoryName,ParameterValue=${{ secrets.ECR_REPOSITORY || 'unity-chatbot' }} \
               ParameterKey=ECSClusterName,ParameterValue=${{ secrets.ECS_CLUSTER }} \
               ParameterKey=ECSServiceName,ParameterValue=${{ secrets.ECS_SERVICE }} \
               ParameterKey=KnowledgeBaseId,ParameterValue=${{ secrets.KNOWLEDGE_BASE_ID || '0G0DQEDJAO' }} \
@@ -92,7 +92,7 @@ jobs:
               ParameterKey=DomainName,ParameterValue=${{ secrets.DOMAIN_NAME }} \
               ParameterKey=CertificateArn,ParameterValue=${{ secrets.CERTIFICATE_ARN }} \
               ParameterKey=EnvironmentName,ParameterValue=prod \
-              ParameterKey=ECRRepositoryName,ParameterValue=${{ secrets.ECR_REPOSITORY }} \
+              ParameterKey=ECRRepositoryName,ParameterValue=${{ secrets.ECR_REPOSITORY || 'unity-chatbot' }} \
               ParameterKey=ECSClusterName,ParameterValue=${{ secrets.ECS_CLUSTER }} \
               ParameterKey=ECSServiceName,ParameterValue=${{ secrets.ECS_SERVICE }} \
               ParameterKey=KnowledgeBaseId,ParameterValue=${{ secrets.KNOWLEDGE_BASE_ID || '0G0DQEDJAO' }} \
