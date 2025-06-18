@@ -31,9 +31,10 @@ jobs:
         run: |
           if ! aws ecr describe-repositories --repository-names $ECR_REPOSITORY 2>/dev/null; then
             echo "Creating ECR repository $ECR_REPOSITORY"
-            aws ecr create-repository --repository-name $ECR_REPOSITORY
+            aws ecr create-repository --repository-name $ECR_REPOSITORY --tags Key=PROJECT,Value=ai4cw
           else
             echo "ECR repository $ECR_REPOSITORY already exists"
+            aws ecr tag-resource --resource-arn arn:aws:ecr:${{ secrets.AWS_REGION }}:${{ github.repository_owner }}:repository/$ECR_REPOSITORY --tags Key=PROJECT,Value=ai4cw
           fi
       
       # Build and push Chatbot image
@@ -65,6 +66,7 @@ jobs:
           aws cloudformation create-stack \
             --stack-name unity-chatbot-stack \
             --template-body file://cloudformation-template-chatbot.yml \
+            --tags Key=PROJECT,Value=ai4cw \
             --parameters \
               ParameterKey=DomainName,ParameterValue=${{ secrets.DOMAIN_NAME }} \
               ParameterKey=CertificateArn,ParameterValue=${{ secrets.CERTIFICATE_ARN }} \
@@ -92,6 +94,7 @@ jobs:
           aws cloudformation update-stack \
             --stack-name unity-chatbot-stack \
             --template-body file://cloudformation-template-chatbot.yml \
+            --tags Key=PROJECT,Value=ai4cw \
             --parameters \
               ParameterKey=DomainName,ParameterValue=${{ secrets.DOMAIN_NAME }} \
               ParameterKey=CertificateArn,ParameterValue=${{ secrets.CERTIFICATE_ARN }} \
