@@ -5,6 +5,7 @@ This is the code repository for the RAG chatbot based on the Unity HPC documenta
 # Structure
 ```
 ├── README.md
+├── README-DEPLOYMENT.md
 ├── data_pipeline/
 │ ├── scrape_and_upload_to_s3.py
 │ ├── scrapping_helper.py
@@ -23,11 +24,14 @@ This is the code repository for the RAG chatbot based on the Unity HPC documenta
 │ └── (Contains scraped Unity HPC documentation in Markdown files)
 ├── .github/
 │ └── workflows/
-│     └── deploy.yml
-├── cloudformation-template.yml
+│     ├── deploy-chatbot.yml
+│     └── deploy-slackbot.yml
+├── cloudformation-template-chatbot.yml
+├── cloudformation-template-slackbot.yml
 ├── .dockerignore
 ├── docker-compose.yaml
-├── Dockerfile
+├── chatbot_dockerfile
+├── slackbot_dockerfile
 ├── requirements.txt
 ├── LICENSE
 └── .gitignore
@@ -52,46 +56,46 @@ This is the code repository for the RAG chatbot based on the Unity HPC documenta
     *   **`test_results/claude_comparison_results.md`**: A human-readable Markdown report summarizing the comparison results, with Claude 3.7 sonnet.
 *   **`documents/`**: This directory stores the scraped documentation in Markdown format, which serves as the knowledge base for the RAG chatbot.
 *   **`.dockerignore`**: Specifies files and directories that should be ignored by Docker when building images, similar to `.gitignore`.
-*   **`Dockerfile`**: Defines the steps to build the Docker image for the chatbot application, specifying the base image, dependencies, and application setup.
+*   **`chatbot_dockerfile`**: Defines the steps to build the Docker image for the Streamlit chatbot application, specifying the base image, dependencies, and application setup.
+*   **`slackbot_dockerfile`**: Defines the steps to build the Docker image for the Slack bot application.
 *   **`.env.example`**: Template for the .env file without any of the key values.
 *   **`requirements.txt`**: Lists all the Python dependencies required to run the chatbot application, used for `pip install`.
 *   **`LICENSE`**: The license file for the project.
 *   **`.gitignore`**: Specifies files and directories that Git should ignore.
-*   **`.github/workflows/deploy.yml`**: GitHub Actions workflow file that automates the CI/CD pipeline for deploying the application to AWS. It builds and pushes the Docker image to Amazon ECR, and deploys the application using CloudFormation.
-*   **`cloudformation-template.yml`**: AWS CloudFormation template that defines the infrastructure as code, including VPC, ECS cluster, load balancer, and other AWS resources needed to run the application in the cloud.
+*   **`README-DEPLOYMENT.md`**: Detailed instructions for deploying the application to AWS.
+*   **`.github/workflows/deploy-chatbot.yml`**: GitHub Actions workflow file that automates the CI/CD pipeline for deploying the Streamlit chatbot application to AWS.
+*   **`.github/workflows/deploy-slackbot.yml`**: GitHub Actions workflow file that automates the CI/CD pipeline for deploying the Slack bot application to AWS.
+*   **`cloudformation-template-chatbot.yml`**: AWS CloudFormation template that defines the infrastructure for the Streamlit chatbot, including VPC, ECS cluster, load balancer, and other AWS resources.
+*   **`cloudformation-template-slackbot.yml`**: AWS CloudFormation template that defines the infrastructure for the Slack bot, including VPC, ECS cluster, and other AWS resources.
 
 
 # Deployment to AWS
 
-The application can be automatically deployed to AWS using the GitHub Actions workflow and CloudFormation template included in this repository.
+The applications can be automatically deployed to AWS using the GitHub Actions workflows and CloudFormation templates included in this repository. For detailed deployment instructions, see [README-DEPLOYMENT.md](README-DEPLOYMENT.md).
 
-## Prerequisites for AWS Deployment
+## Deployment Architecture
 
-1. AWS account with appropriate permissions
-2. The following secrets configured in your GitHub repository:
-   - `AWS_ACCESS_KEY_ID`: Your AWS access key
-   - `AWS_SECRET_ACCESS_KEY`: Your AWS secret key
-   - `AWS_REGION`: The AWS region to deploy to
-   - `DOMAIN_NAME`: Domain name for the application
-   - `CERTIFICATE_ARN`: ARN of the SSL certificate for HTTPS
-   - Other optional secrets as defined in the deploy.yml file
+This project uses a dual-deployment architecture:
+
+1. **Streamlit Chatbot** - A web application with public access via an Application Load Balancer
+2. **Slack Bot** - A background service that connects to Slack without public internet access
 
 ## Deployment Process
 
-The deployment process is automated through GitHub Actions and happens when:
+Both applications are deployed independently through separate GitHub Actions workflows that run when:
 - Code is pushed to the main branch
 - The workflow is manually triggered
 
-The workflow:
-1. Builds the Docker image
+Each workflow:
+1. Builds the respective Docker image (chatbot or slackbot)
 2. Pushes it to Amazon ECR
-3. Creates or updates the CloudFormation stack
+3. Creates or updates the corresponding CloudFormation stack
 4. Deploys the application to ECS
 
-The CloudFormation template provisions all necessary AWS resources including:
+The CloudFormation templates provision all necessary AWS resources including:
 - VPC and networking components
-- ECS cluster and service
-- Application Load Balancer
+- ECS clusters and services
+- Application Load Balancer (for the chatbot only)
 - IAM roles and policies
 - CloudWatch logs
 

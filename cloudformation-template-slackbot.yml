@@ -94,6 +94,18 @@ Parameters:
     Default: ""
     Description: Slack App Token
     NoEcho: true
+    
+  AWSAccessKeyID:
+    Type: String
+    Default: ""
+    Description: AWS Access Key ID
+    NoEcho: true
+    
+  AWSSecretAccessKey:
+    Type: String
+    Default: ""
+    Description: AWS Secret Access Key
+    NoEcho: true
 
 Resources:
   # VPC and Networking
@@ -109,33 +121,6 @@ Resources:
         - Key: PROJECT
           Value: !Ref ProjectTag
 
-  PrivateSubnet1:
-    Type: AWS::EC2::Subnet
-    Properties:
-      VpcId: !Ref VPC
-      AvailabilityZone: !Select [0, !GetAZs '']
-      CidrBlock: 10.1.1.0/24
-      MapPublicIpOnLaunch: false
-      Tags:
-        - Key: Name
-          Value: UnitySlackBot-Private-Subnet-1
-        - Key: PROJECT
-          Value: !Ref ProjectTag
-
-  PrivateSubnet2:
-    Type: AWS::EC2::Subnet
-    Properties:
-      VpcId: !Ref VPC
-      AvailabilityZone: !Select [1, !GetAZs '']
-      CidrBlock: 10.1.2.0/24
-      MapPublicIpOnLaunch: false
-      Tags:
-        - Key: Name
-          Value: UnitySlackBot-Private-Subnet-2
-        - Key: PROJECT
-          Value: !Ref ProjectTag
-
-  # For outbound internet access
   PublicSubnet1:
     Type: AWS::EC2::Subnet
     Properties:
@@ -207,53 +192,6 @@ Resources:
       SubnetId: !Ref PublicSubnet2
       RouteTableId: !Ref PublicRouteTable
 
-  # NAT Gateway for private subnets
-  NatGatewayEIP:
-    Type: AWS::EC2::EIP
-    DependsOn: AttachGateway
-    Properties:
-      Domain: vpc
-
-  NatGateway:
-    Type: AWS::EC2::NatGateway
-    Properties:
-      AllocationId: !GetAtt NatGatewayEIP.AllocationId
-      SubnetId: !Ref PublicSubnet1
-      Tags:
-        - Key: Name
-          Value: UnitySlackBot-NAT
-        - Key: PROJECT
-          Value: !Ref ProjectTag
-
-  PrivateRouteTable:
-    Type: AWS::EC2::RouteTable
-    Properties:
-      VpcId: !Ref VPC
-      Tags:
-        - Key: Name
-          Value: UnitySlackBot-Private-RT
-        - Key: PROJECT
-          Value: !Ref ProjectTag
-
-  PrivateRoute:
-    Type: AWS::EC2::Route
-    Properties:
-      RouteTableId: !Ref PrivateRouteTable
-      DestinationCidrBlock: 0.0.0.0/0
-      NatGatewayId: !Ref NatGateway
-
-  PrivateSubnet1RouteTableAssociation:
-    Type: AWS::EC2::SubnetRouteTableAssociation
-    Properties:
-      SubnetId: !Ref PrivateSubnet1
-      RouteTableId: !Ref PrivateRouteTable
-
-  PrivateSubnet2RouteTableAssociation:
-    Type: AWS::EC2::SubnetRouteTableAssociation
-    Properties:
-      SubnetId: !Ref PrivateSubnet2
-      RouteTableId: !Ref PrivateRouteTable
-
   # Security Groups
   ECSSecurityGroup:
     Type: AWS::EC2::SecurityGroup
@@ -307,9 +245,9 @@ Resources:
             - Name: AWS_REGION
               Value: !Ref AWS::Region
             - Name: AWS_ACCESS_KEY_ID
-              Value: '{{resolve:ssm:/unity-slackbot/aws-access-key-id:1}}'
+              Value: !Ref AWSAccessKeyID
             - Name: AWS_SECRET_ACCESS_KEY
-              Value: '{{resolve:ssm:/unity-slackbot/aws-secret-access-key:1}}'
+              Value: !Ref AWSSecretAccessKey
             - Name: KNOWLEDGE_BASE_ID
               Value: !Ref KnowledgeBaseId
             - Name: S3_BUCKET_NAME
@@ -406,15 +344,6 @@ Resources:
                   - bedrock-agent:*
                   - bedrock-agent-runtime:*
                 Resource: "*"
-        - PolicyName: SecretsManagerAccess
-          PolicyDocument:
-            Version: '2012-10-17'
-            Statement:
-              - Effect: Allow
-                Action:
-                  - secretsmanager:GetSecretValue
-                Resource:
-                  - !Sub "arn:aws:secretsmanager:${AWS::Region}:${AWS::AccountId}:secret:SlackbotCredentials*"
 
   # CloudWatch Logs
   CloudWatchLogsGroup:
