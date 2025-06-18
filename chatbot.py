@@ -15,7 +15,7 @@ from feedback import display_feedback_form
 # load the environment variables
 load_dotenv()
 
-st.title("Unity Chatbot")
+st.title("🧠 Unity Chatbot")
 
 # Authentication Logic
 UNITY_USERNAME = os.getenv("UNITY_USERNAME")
@@ -67,6 +67,14 @@ for i, message in enumerate(st.session_state.messages):
         continue
     with st.chat_message(message["role"]):
         st.markdown(message["content"])
+        
+        # Display sources if they exist in the message
+        if message["role"] == "assistant" and "sources" in message and message["sources"]:
+            st.markdown("---")
+            st.markdown("**Sources**")
+            for j, doc in enumerate(message["sources"]):
+                with st.expander(f"Source {j + 1}"):
+                    st.markdown(doc.page_content)
         
         # Add feedback form for assistant messages in chat history
         if message["role"] == "assistant" and i > 1:  # Skip system message and ensure there's a preceding user message
@@ -136,7 +144,7 @@ if prompt := st.chat_input("What is up?"):
                 st.markdown("---")
                 st.markdown("**Sources**")
                 for i, doc in enumerate(relevant_docs):
-                    with st.expander(f"Source {i + 1}"):
+                    with st.expander(f" 🔍 Source {i + 1}"):
                         st.markdown(doc.page_content)
 
             # Display feedback form for this response
@@ -144,4 +152,4 @@ if prompt := st.chat_input("What is up?"):
             display_feedback_form(prompt, response, relevant_docs if relevant_docs else [], unique_key)
 
     # update memory
-    st.session_state.messages.append({"role": "assistant", "content": response})
+    st.session_state.messages.append({"role": "assistant", "content": response, "sources": relevant_docs})

@@ -322,40 +322,23 @@ def handle_message_events(body, message, say, client):
 
 # Main Execution Block
 if __name__ == "__main__":
-    # Set default AWS region if not provided
-    if not os.environ.get("AWS_REGION"):
-        os.environ["AWS_REGION"] = "us-east-1"  # Default to us-east-1
-        logger.info("AWS_REGION not set, defaulting to us-east-1")
-    
-    # Check for required environment variables
     missing_vars = []
     required_env_vars = [
         "SLACK_BOT_TOKEN",
         "SLACK_APP_TOKEN",
+        "AWS_ACCESS_KEY_ID",
+        "AWS_SECRET_ACCESS_KEY",
+        "AWS_REGION",
         "KNOWLEDGE_BASE_ID",
     ]
     for var in required_env_vars:
         if not os.getenv(var):
             missing_vars.append(var)
-    
-    # Log missing variables but continue execution
     if missing_vars:
-        logger.warning(
-            f"Missing some environment variables: {', '.join(missing_vars)}"
+        logger.error(
+            f"Missing critical environment variables: {', '.join(missing_vars)}"
         )
-    
-    # Check for AWS credentials but don't exit if missing
-    aws_creds_missing = []
-    aws_vars = ["AWS_ACCESS_KEY_ID", "AWS_SECRET_ACCESS_KEY"]
-    for var in aws_vars:
-        if not os.getenv(var):
-            aws_creds_missing.append(var)
-    
-    if aws_creds_missing:
-        logger.warning(
-            f"AWS credentials missing: {', '.join(aws_creds_missing)}. "
-            "Will attempt to use instance profile or container role credentials."
-        )
+        exit(1)
 
     if not llm or not retriever:
         logger.error(

@@ -129,21 +129,13 @@ Your queries should focus on topics relevant to an HPC environment. Consider the
 
 
 def initialize_bedrock_client():
-    """Initialize and return a Bedrock client using environment variables or instance profile"""
-    # If AWS credentials are provided as environment variables, use them
-    if os.getenv("AWS_ACCESS_KEY_ID") and os.getenv("AWS_SECRET_ACCESS_KEY"):
-        return boto3.client(
-            service_name="bedrock-runtime",
-            region_name=os.getenv("AWS_REGION", "us-east-1"),
-            aws_access_key_id=os.getenv("AWS_ACCESS_KEY_ID"),
-            aws_secret_access_key=os.getenv("AWS_SECRET_ACCESS_KEY"),
-        )
-    # Otherwise, use the instance profile or container role credentials
-    else:
-        return boto3.client(
-            service_name="bedrock-runtime",
-            region_name=os.getenv("AWS_REGION", "us-east-1"),
-        )
+    """Initialize and return a Bedrock client using environment variables"""
+    return boto3.client(
+        service_name="bedrock-runtime",
+        region_name=os.getenv("AWS_REGION"),
+        aws_access_key_id=os.getenv("AWS_ACCESS_KEY_ID"),
+        aws_secret_access_key=os.getenv("AWS_SECRET_ACCESS_KEY"),
+    )
 
 
 def initialize_llm(client, model_id="us.anthropic.claude-3-7-sonnet-20250219-v1:0"):

@@ -216,8 +216,6 @@ Resources:
         - Key: PROJECT
           Value: !Ref ProjectTag
 
-  # ECR Repository is created in the GitHub workflow, not here
-
   # ECS Cluster
   ECSCluster:
     Type: AWS::ECS::Cluster

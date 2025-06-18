@@ -1,0 +1,116 @@
+name: Deploy Unity Slackbot
+
+on:
+  push:
+    branches: [ main ]
+  workflow_dispatch:
+
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+      
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v2
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ secrets.AWS_REGION }}
+      
+      - name: Login to Amazon ECR
+        id: login-ecr
+        uses: aws-actions/amazon-ecr-login@v1
+      
+      # Slackbot ECR Repository
+      - name: Ensure Slackbot ECR repository exists
+        env:
+          ECR_REPOSITORY: ${{ secrets.SLACKBOT_ECR_REPOSITORY || 'unity-slackbot' }}
+        run: |
+          if ! aws ecr describe-repositories --repository-names $ECR_REPOSITORY 2>/dev/null; then
+            echo "Creating ECR repository $ECR_REPOSITORY"
+            aws ecr create-repository --repository-name $ECR_REPOSITORY
+          else
+            echo "ECR repository $ECR_REPOSITORY already exists"
+          fi
+      
+      # Build and push Slackbot image
+      - name: Build, tag, and push Slackbot image to Amazon ECR
+        env:
+          ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
+          ECR_REPOSITORY: ${{ secrets.SLACKBOT_ECR_REPOSITORY || 'unity-slackbot' }}
+          IMAGE_TAG: ${{ github.sha }}
+        run: |
+          docker build -t $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG -f slackbot_dockerfile .
+          docker push $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG
+          docker tag $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG $ECR_REGISTRY/$ECR_REPOSITORY:latest
+          docker push $ECR_REGISTRY/$ECR_REPOSITORY:latest
+      
+      # Slackbot CloudFormation Stack
+      - name: Check if Slackbot CloudFormation stack exists
+        id: check-slackbot-stack
+        run: |
+          if aws cloudformation describe-stacks --stack-name unity-slackbot-stack 2>&1 | grep -q "Stack with id unity-slackbot-stack does not exist"; then
+            echo "stack_exists=false" >> $GITHUB_OUTPUT
+          else
+            echo "stack_exists=true" >> $GITHUB_OUTPUT
+          fi
+      
+      - name: Create Slackbot CloudFormation stack if it doesn't exist
+        if: steps.check-slackbot-stack.outputs.stack_exists == 'false'
+        run: |
+          echo "Creating Slackbot CloudFormation stack..."
+          aws cloudformation create-stack \
+            --stack-name unity-slackbot-stack \
+            --template-body file://cloudformation-template-slackbot.yml \
+            --parameters \
+              ParameterKey=EnvironmentName,ParameterValue=prod \
+              ParameterKey=ECRRepositoryName,ParameterValue=${{ secrets.SLACKBOT_ECR_REPOSITORY || 'unity-slackbot' }} \
+              ParameterKey=ECSClusterName,ParameterValue=unity-slackbot-cluster \
+              ParameterKey=ECSServiceName,ParameterValue=unity-slackbot-service \
+              ParameterKey=KnowledgeBaseId,ParameterValue=${{ secrets.KNOWLEDGE_BASE_ID || '0G0DQEDJAO' }} \
+              ParameterKey=S3BucketName,ParameterValue=${{ secrets.S3_BUCKET_NAME || 'umass-unity-chatbot' }} \
+              ParameterKey=S3FolderPrefix,ParameterValue=${{ secrets.S3_FOLDER_PREFIX || 'documents/' }} \
+              ParameterKey=UnityUsername,ParameterValue=${{ secrets.UNITY_USERNAME || 'unity_team' }} \
+              ParameterKey=UnityPassword,ParameterValue=${{ secrets.UNITY_PASSWORD || '123' }} \
+              ParameterKey=SlackBotToken,ParameterValue=${{ secrets.SLACK_BOT_TOKEN || '' }} \
+              ParameterKey=SlackAppToken,ParameterValue=${{ secrets.SLACK_APP_TOKEN || '' }} \
+              ParameterKey=AWSAccessKeyID,ParameterValue=${{ secrets.AWS_ACCESS_KEY_ID }} \
+              ParameterKey=AWSSecretAccessKey,ParameterValue=${{ secrets.AWS_SECRET_ACCESS_KEY }} \
+              ParameterKey=DesiredCount,ParameterValue=1 \
+            --capabilities CAPABILITY_IAM CAPABILITY_NAMED_IAM
+          
+          echo "Waiting for stack creation to complete..."
+          aws cloudformation wait stack-create-complete --stack-name unity-slackbot-stack
+      
+      - name: Update Slackbot CloudFormation stack if it exists
+        if: steps.check-slackbot-stack.outputs.stack_exists == 'true'
+        run: |
+          echo "Updating Slackbot CloudFormation stack..."
+          aws cloudformation update-stack \
+            --stack-name unity-slackbot-stack \
+            --template-body file://cloudformation-template-slackbot.yml \
+            --parameters \
+              ParameterKey=EnvironmentName,ParameterValue=prod \
+              ParameterKey=ECRRepositoryName,ParameterValue=${{ secrets.SLACKBOT_ECR_REPOSITORY || 'unity-slackbot' }} \
+              ParameterKey=ECSClusterName,ParameterValue=unity-slackbot-cluster \
+              ParameterKey=ECSServiceName,ParameterValue=unity-slackbot-service \
+              ParameterKey=KnowledgeBaseId,ParameterValue=${{ secrets.KNOWLEDGE_BASE_ID || '0G0DQEDJAO' }} \
+              ParameterKey=S3BucketName,ParameterValue=${{ secrets.S3_BUCKET_NAME || 'umass-unity-chatbot' }} \
+              ParameterKey=S3FolderPrefix,ParameterValue=${{ secrets.S3_FOLDER_PREFIX || 'documents/' }} \
+              ParameterKey=UnityUsername,ParameterValue=${{ secrets.UNITY_USERNAME || 'unity_team' }} \
+              ParameterKey=UnityPassword,ParameterValue=${{ secrets.UNITY_PASSWORD || '123' }} \
+              ParameterKey=SlackBotToken,ParameterValue=${{ secrets.SLACK_BOT_TOKEN || '' }} \
+              ParameterKey=SlackAppToken,ParameterValue=${{ secrets.SLACK_APP_TOKEN || '' }} \
+              ParameterKey=AWSAccessKeyID,ParameterValue=${{ secrets.AWS_ACCESS_KEY_ID }} \
+              ParameterKey=AWSSecretAccessKey,ParameterValue=${{ secrets.AWS_SECRET_ACCESS_KEY }} \
+              ParameterKey=DesiredCount,ParameterValue=1 \
+            --capabilities CAPABILITY_IAM CAPABILITY_NAMED_IAM || echo "No updates to be performed"
+          
+          # Wait for stack update to complete if an update was performed
+          if [ $? -eq 0 ]; then
+            echo "Waiting for stack update to complete..."
+            aws cloudformation wait stack-update-complete --stack-name unity-slackbot-stack
+          fi
