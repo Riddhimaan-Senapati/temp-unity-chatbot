@@ -34,7 +34,9 @@ jobs:
             aws ecr create-repository --repository-name $ECR_REPOSITORY --tags Key=PROJECT,Value=ai4cw
           else
             echo "ECR repository $ECR_REPOSITORY already exists"
-            aws ecr tag-resource --resource-arn arn:aws:ecr:${{ secrets.AWS_REGION }}:${{ github.repository_owner }}:repository/$ECR_REPOSITORY --tags Key=PROJECT,Value=ai4cw
+            # Get the repository ARN from the describe-repositories output
+            REPO_ARN=$(aws ecr describe-repositories --repository-names $ECR_REPOSITORY --query "repositories[0].repositoryArn" --output text)
+            aws ecr tag-resource --resource-arn $REPO_ARN --tags Key=PROJECT,Value=ai4cw || echo "Failed to tag repository, continuing..."
           fi
       
       # Build and push Chatbot image
