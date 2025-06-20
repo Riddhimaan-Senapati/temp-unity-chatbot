@@ -1,39 +1,44 @@
-import os
 import json
+import boto3
 import streamlit as st
 from datetime import datetime
 import pandas as pd
 
-
+# Load feedback details in S3 Bucket
 def save_feedback(feedback_data):
-    """Save user feedback to a JSON file"""
-    feedback_folder = "feedback"
-    feedback_file = os.path.join(feedback_folder, "user_feedback.json")
-    
-    # Create feedback folder if it doesn't exist
-    os.makedirs(feedback_folder, exist_ok=True)
-    
-    # Load existing feedback or create new list
-    if os.path.exists(feedback_file):
-        with open(feedback_file, 'r', encoding='utf-8') as f:
-            feedback_list = json.load(f)
-    else:
-        feedback_list = []
-    
     # Add timestamp and ID to feedback
     feedback_data['timestamp'] = datetime.now().isoformat()
-    feedback_data['feedback_id'] = len(feedback_list) + 1
     
-    # Append new feedback
-    feedback_list.append(feedback_data)
-    
-    # Save updated feedback
-    with open(feedback_file, 'w', encoding='utf-8') as f:
-        json.dump(feedback_list, f, indent=2, ensure_ascii=False)
+    try:
+        # Create S3 client
+        s3_client = boto3.client('s3')
+        
+        # Get existing feedback list from S3 or create new one
+        try:
+            response = s3_client.get_object(
+                Bucket='unity-chatbot-feedback',
+                Key='feedback/all_feedback.json'
+            )
+            feedback_list = json.loads(response['Body'].read().decode('utf-8'))
+        except:
+            feedback_list = []
+        
+        # Append new feedback
+        feedback_list.append(feedback_data)
+        
+        # Update the consolidated feedback file in S3
+        consolidated_json = json.dumps(feedback_list, indent=2, ensure_ascii=False)
+        s3_client.put_object(
+            Bucket='unity-chatbot-feedback',
+            Key='feedback/all_feedback.json',
+            Body=consolidated_json,
+            ContentType='application/json'
+        )
+    except Exception as e:
+        print(f"Error saving to S3: {e}")
 
-
-def display_feedback_form(question, response, sources, unique_key):
-    """Display feedback form for a specific response"""
+# Display feedback form for user responses
+def display_feedback_form(question, response, unique_key):
     st.markdown("---")
     
     # Create expandable feedback section
@@ -64,7 +69,6 @@ def display_feedback_form(question, response, sources, unique_key):
                 quick_feedback = {
                     "question": question,
                     "response": response,
-                    "sources": [doc.page_content if hasattr(doc, 'page_content') else str(doc) for doc in sources] if sources else [],
                     "rating": 5,
                     "feedback_type": "positive",
                     "comments": "User marked as helpful"
@@ -76,8 +80,7 @@ def display_feedback_form(question, response, sources, unique_key):
                 quick_feedback = {
                     "question": question,
                     "response": response,
-                    "sources": [doc.page_content if hasattr(doc, 'page_content') else str(doc) for doc in sources] if sources else [],
-                    "rating": 2,
+                    "rating": 1,
                     "feedback_type": "negative",
                     "comments": "User marked as not helpful"
                 }
@@ -88,7 +91,6 @@ def display_feedback_form(question, response, sources, unique_key):
             feedback_data = {
                 "question": question,
                 "response": response,
-                "sources": [doc.page_content if hasattr(doc, 'page_content') else str(doc) for doc in sources] if sources else [],
                 "rating": rating,
                 "feedback_type": "detailed",
                 "comments": comments
@@ -97,26 +99,68 @@ def display_feedback_form(question, response, sources, unique_key):
             save_feedback(feedback_data)
             st.success("Thank you for your detailed feedback! 🙏")
 
-
-def load_feedback_data():
-    """Load feedback data from JSON file and return as pandas DataFrame"""
-    feedback_folder = "feedback"
-    feedback_file = os.path.join(feedback_folder, "user_feedback.json")
+# Display feedback form for sources
+def display_feedback_form_for_sources(question, response, doc, unique_key):
+    """Display a simplified feedback form specifically for sources"""
     
-    if os.path.exists(feedback_file):
-        with open(feedback_file, 'r', encoding='utf-8') as f:
-            feedback_list = json.load(f)
+    # Add a separator and header for the feedback section
+    st.markdown("---")
+    st.markdown("**📝 Rate This Source:**")
+    
+    # Rating system for source quality
+    source_rating = st.select_slider(
+        "How helpful was this source for answering your question?",
+        options=[1, 2, 3, 4, 5],
+        value=3,
+        format_func=lambda x: f"{x} {'⭐' * x}",
+        key=f"source_rating_{unique_key}"
+    )
+    
+    # Comments for source feedback
+    source_comments = st.text_area(
+        "Comments about this source:",
+        placeholder="Was this source relevant? Did it provide accurate information?",
+        key=f"source_comments_{unique_key}",
+        height=80
+    )
+      # Submit source feedback
+    if st.button("Submit Source Feedback", key=f"source_submit_{unique_key}"):
+        source_feedback_data = {
+            "question": question,
+            "response": response,
+            "source_content": doc.page_content if hasattr(doc, 'page_content') else str(doc),
+            "rating": source_rating,
+            "feedback_type": "source",
+            "comments": source_comments
+        }
+        
+        save_feedback(source_feedback_data)
+        st.success("Thank you for rating this source! 📚")
+
+
+# Load feedback data from S3 as DataFrame
+def load_feedback_data():
+    try:
+        # Load from S3
+        s3_client = boto3.client('s3')
+        response = s3_client.get_object(
+            Bucket='unity-chatbot-feedback',
+            Key='feedback/all_feedback.json'
+        )
+        feedback_list = json.loads(response['Body'].read().decode('utf-8'))
         
         if feedback_list:
             df = pd.DataFrame(feedback_list)
             # Convert timestamp to datetime
             df['timestamp'] = pd.to_datetime(df['timestamp'])
             return df
+    except Exception as e:
+        print(f"Error loading from S3: {e}")
+    
     return pd.DataFrame()
 
-
+# Display the feedback dashboard with analytics and recent feedback
 def display_feedback_dashboard():
-    """Display comprehensive feedback analytics for dashboard page"""
     st.header("📊 User Feedback Analytics")
     
     df = load_feedback_data()
@@ -145,19 +189,17 @@ def display_feedback_dashboard():
         st.metric("Positive Rate", f"{positive_rate:.1f}%")
     
     # Distribution chart
-
     st.subheader("Rating Distribution")
     rating_counts = df['rating'].value_counts().sort_index()
     st.bar_chart(rating_counts)
 
     # Recent feedback table
-    st.subheader("Recent Detailed Feedback")
+    st.subheader("Recent Detailed Response Feedback")
     # Filter only detailed feedback types
     detailed_df = df[df['feedback_type'] == 'detailed']
     if not detailed_df.empty:
         recent_detailed_df = detailed_df.nlargest(10, 'timestamp')[['timestamp', 'rating', 'question', 'response', 'feedback_type', 'comments']].copy()
         recent_detailed_df['timestamp'] = recent_detailed_df['timestamp'].dt.strftime('%Y-%m-%d %H:%M')
-        # Truncate question and response to first 50 characters
         recent_detailed_df['question'] = recent_detailed_df['question'].astype(str)
         recent_detailed_df['response'] = recent_detailed_df['response'].astype(str)
         # Reorder columns for better display
@@ -165,6 +207,19 @@ def display_feedback_dashboard():
         st.dataframe(recent_detailed_df, use_container_width=True)
     else:
         st.info("No detailed feedback available yet.")
+
+    # Recent feedback for sources
+    st.subheader("Recent Source Feedback")
+    # Filter only source feedback types
+    source_df = df[df['feedback_type'] == 'source']
+    if not source_df.empty:
+        recent_source_df = source_df.nlargest(10, 'timestamp')[['timestamp', 'rating', 'question', 'source_content', 'comments']].copy()
+        recent_source_df['timestamp'] = recent_source_df['timestamp'].dt.strftime('%Y-%m-%d %H:%M')
+        recent_source_df['question'] = recent_source_df['question'].astype(str)
+        recent_source_df['source_content'] = recent_source_df['source_content'].astype(str)
+        st.dataframe(recent_source_df, use_container_width=True)
+    else:
+        st.info("No source feedback available yet.")
     
     # Export functionality
     if st.button("📥 Export Feedback Data"):
