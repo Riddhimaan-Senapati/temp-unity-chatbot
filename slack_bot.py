@@ -19,6 +19,8 @@ from chatbot_helper import (
 load_dotenv()
 
 # Initialize Logging
+# Note: switch to logging.DEBUG if you want more information, but that mode can get verbose
+
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
@@ -66,11 +68,15 @@ def reconstruct_history_from_slack(client, channel_id, thread_ts):
 
     history = [SystemMessage(content=slack_system_prompt)]
     try:
-        # limit message history to 200 messages.It is very unlikely this limit will be breached
+        # limit message history to 200 messages.It is very likely this limit will be breached
         result = client.conversations_replies(
             channel=channel_id, ts=thread_ts, limit=200
         )
         messages = result.get("messages", [])
+        # Log the number of messages fetched from Slack for the thread
+        logger.info(
+            f"Fetched {len(messages)} messages from Slack for thread {thread_ts}."
+        )
 
         # sort by thread timestamp/id in ascending order (so older messages first)
         for msg in sorted(messages, key=lambda x: float(x["ts"])):
@@ -84,12 +90,18 @@ def reconstruct_history_from_slack(client, channel_id, thread_ts):
                     history.append(AIMessage(content=msg_text))
             elif msg_user:
                 cleaned_text = msg_text
-                if msg["ts"] == thread_ts:
+                if msg["ts"] == thread_ts:  # If it's the root message of the thread
+                    # Log if mention is being cleaned from root message
+                    if f"<@{bot_user_id}>" in msg_text:
+                        logger.debug(
+                            f"Cleaning bot mention from root message in thread {thread_ts}"
+                        )
                     cleaned_text = msg_text.replace(f"<@{bot_user_id}>", "").strip()
                 if cleaned_text:
                     history.append(HumanMessage(content=cleaned_text))
+        # Log the final length of the reconstructed history list
         logger.info(
-            f"Reconstructed history for thread {thread_ts} with {len(history) - 1} turns."
+            f"Reconstructed history for thread {thread_ts} with {len(history) - 1} turns (total {len(history)} messages including system prompt)."
         )
     except Exception as e:
         logger.error(
@@ -108,51 +120,115 @@ def process_user_message_with_slack_history(
         logger.error("LLM or Retriever not initialized. Cannot process message.")
         return "Sorry, the AI service is currently unavailable. Please check the logs or contact an administrator."
 
+    # Log the raw user input for this specific interaction
+    logger.info(
+        f"Processing user message for thread {thread_ts_key}. Raw input: '{current_user_text_raw}'"
+    )
+
     current_thread_history = reconstruct_history_from_slack(
         client, channel_id, thread_ts_key
     )
 
+    # Log the full history being used for query optimization (can be verbose, use DEBUG)
+    logger.debug(
+        f"History for query optimization (thread {thread_ts_key}): {current_thread_history}"
+    )
+
     # First, generate an optimized search query using conversation history
-    query_messages = [
-        {"role": "system", "content": question_system_prompt},
-        *[
-            {"role": m.type, "content": m.content} for m in current_thread_history[1:-1]
-        ],  # All messages except system prompt and the last user message(will be replaced by augmented user prompt)
-        {
-            "role": "user",
-            "content": f"Based on this conversation history, generate a search query for: {current_user_text_raw}",
-        },
+    # We want to provide the LLM with the history leading up to the current question,
+    # and then the current question to optimize.
+    messages_for_query_optimization_llm = [
+        SystemMessage(content=question_system_prompt)
     ]
+
+    # Add historical messages (all except the very last one if history is not just system + current)
+    # The last message in current_thread_history is the current_user_text_raw (or its cleaned version)
+    if (
+        len(current_thread_history) > 2
+    ):  # if there are actual past turns beyond system and current
+        for msg_idx in range(
+            1, len(current_thread_history) - 1
+        ):  # from after system, up to before current
+            messages_for_query_optimization_llm.append(current_thread_history[msg_idx])
+
+    # Add the current user's raw text (the question to be optimized)
+    # Ensure it's cleaned of bot mention if it's a direct ping to the bot
+    cleaned_current_user_text = (
+        current_user_text_raw.replace(f"<@{bot_user_id}>", "").strip()
+        if bot_user_id
+        else current_user_text_raw.strip()
+    )
+    if not cleaned_current_user_text:  # If the message was only a mention
+        logger.warning(
+            f"User message for thread {thread_ts_key} was empty after cleaning mention. Using 'help' as query."
+        )
+        cleaned_current_user_text = "help"  # Fallback
+
+    messages_for_query_optimization_llm.append(
+        HumanMessage(
+            content=f'Based on the conversation history (if any), generate an optimized search query for the following user question: "{cleaned_current_user_text}"'
+        )
+    )
+
+    # Log the messages being sent for query optimization
+    logger.debug(
+        f"Messages for query optimization LLM (thread {thread_ts_key}): {messages_for_query_optimization_llm}"
+    )
 
     try:
         # Get the optimized query from the LLM
-        query_response = llm.invoke(query_messages)
+        query_response = llm.invoke(messages_for_query_optimization_llm)
         optimized_query = query_response.content.strip()
-        logger.info(f"Generated optimized query: {optimized_query}")
+        # Log the optimized query received from LLM
+        logger.info(
+            f"Generated optimized query for thread {thread_ts_key}: '{optimized_query}'"
+        )
+        if not optimized_query:  # Handle empty optimized query
+            logger.warning(
+                f"Optimized query was empty for thread {thread_ts_key}. Using cleaned user text: '{cleaned_current_user_text}'"
+            )
+            optimized_query = cleaned_current_user_text
 
         # Retrieve context and relevant docs based on optimized query
         context, relevant_docs = retrieve_context(
             retriever=retriever, prompt=optimized_query
         )
-
-        # Create augmented user prompt
-        augmented_current_user_prompt = (
-            f"Context:\n{context}\n\nQuestion: {current_user_text_raw}"
+        # Log a snippet of the retrieved context
+        logger.debug(
+            f"Retrieved context for thread {thread_ts_key} (first 100 chars): {str(context)[:100]}"
         )
 
-        # Replace user prompt with augmented user prompt in thread history
-        current_thread_history[-1] = HumanMessage(content=augmented_current_user_prompt)
+        # Create augmented user prompt using the cleaned current user text as the "Question"
+        augmented_current_user_prompt = (
+            f"Context:\n{context}\n\nQuestion: {cleaned_current_user_text}"
+        )
+        # Log the augmented prompt being used
+        logger.debug(
+            f"Augmented prompt for thread {thread_ts_key}: {augmented_current_user_prompt}"
+        )
 
+        # Construct the final history for the main LLM call.
+        # It should be the `current_thread_history` with its last HumanMessage (the raw user input)
+        # replaced by this `augmented_current_user_prompt`.
+        final_history_for_main_llm = current_thread_history[:-1] + [
+            HumanMessage(content=augmented_current_user_prompt)
+        ]
+
+        # Log final history length and snippet of last message
         logger.info(
-            f"Sending to LLM for thread {thread_ts_key}. History length: {len(current_thread_history)} messages."
+            f"Sending to main LLM for thread {thread_ts_key}. Final history length: {len(final_history_for_main_llm)} messages."
+        )
+        logger.debug(
+            f"Final history for main LLM (thread {thread_ts_key}): {final_history_for_main_llm}"
         )
 
         # Get LLM response
-        ai_response = llm.invoke(current_thread_history)
+        ai_response = llm.invoke(final_history_for_main_llm)
         ai_message_content = (
             ai_response.content if hasattr(ai_response, "content") else str(ai_response)
         )
-        logger.info(f"Successfully processed LLM response for thread {thread_ts_key}")
+        # Log the LLM's final response content
+        logger.info(f"LLM response for thread {thread_ts_key}: '{ai_message_content}'")
         return ai_message_content
     except Exception as e:
         logger.error(
@@ -170,68 +246,64 @@ def handle_app_mention_events(body, say, client):
     user_id = event["user"]
     channel_id = event["channel"]
 
-    """
-    IMPORTANT: Determine the correct thread_ts to use for history
-    If the app_mention event itself has a thread_ts, it means this mention occurred within an existing thread.
-    In this case, thread_ts_from_event is the key for the whole conversation.
-    If not, event["ts"] (the timestamp of this mention) starts a new thread.
-    """
     thread_ts_for_history = event.get("thread_ts", event["ts"])
-    current_message_ts = event["ts"]  # Timestamp of this specific mention message
+    current_message_ts = event["ts"]
 
+    # More detailed log for app_mention event
     logger.info(
-        f"Received app_mention (current_message_ts: {current_message_ts}, using thread_ts_for_history: {thread_ts_for_history}) "
-        f"from user {user_id} in channel {channel_id}: '{user_text_raw}'"
+        f"APP_MENTION event triggered. User: {user_id}, Channel: {channel_id}, "
+        f"Message TS: {current_message_ts}, Thread TS for history: {thread_ts_for_history}. "
+        f"Raw text: '{user_text_raw}'"
     )
 
-    if (
-        bot_user_id and not user_text_raw.replace(f"<@{bot_user_id}>", "").strip()
-    ):  # Check if empty after removing mention
+    # The user_text_raw already contains the mention.
+    # process_user_message_with_slack_history will handle cleaning it if needed for the "Question:" part.
+    prompt_for_processing = user_text_raw
+
+    if bot_user_id and not user_text_raw.replace(f"<@{bot_user_id}>", "").strip():
+        logger.info(
+            f"App mention for thread {thread_ts_for_history} was empty after removing mention. Sending generic help."
+        )
         say(
             text="Hi there! How can I help you today? Please ask me a question.",
             thread_ts=thread_ts_for_history,
         )
         return
 
-    # Pass the correct thread_ts_for_history to get the full conversation context,
-    # and the raw text of this specific mention.
     response_text = process_user_message_with_slack_history(
-        client, channel_id, thread_ts_for_history, user_text_raw
+        client, channel_id, thread_ts_for_history, prompt_for_processing
     )
 
     try:
-        # Reply in the correct thread.
         say(text=response_text, thread_ts=thread_ts_for_history)
-        logger.info(f"Sent LLM response directly to thread {thread_ts_for_history}.")
+        # Log successful response sending
+        logger.info(
+            f"Successfully sent LLM response via 'say' to thread {thread_ts_for_history}."
+        )
     except Exception as e:
         logger.error(
-            f"Error sending LLM response to thread {thread_ts_for_history}: {e}",
+            f"Error sending LLM response via 'say' to thread {thread_ts_for_history}: {e}",
             exc_info=True,
         )
-        try:  # Try to send an error message
+        try:
             say(
                 text="Sorry, I couldn't send my response.",
                 thread_ts=thread_ts_for_history,
             )
         except Exception as e_say:
-            logger.error(f"Failed to send even error response: {e_say}")
+            logger.error(f"Failed to send even error response via 'say': {e_say}")
 
 
 # Event Listener for Messages (Follow-ups in Threads and DMs)
-# This handler will catch DMs. It will IGNORE messages in channels/groups unless they directly @mention the bot
-# (because app_mention handler should take precedence for those).
 @app.event("message")
 def handle_message_events(body, message, say, client):
     channel_type = message.get("channel_type")
     user_id = message.get("user")
     text_raw = message.get("text")
-    event_thread_ts = message.get(
-        "thread_ts"
-    )  # Timestamp of the root message of the thread, if this message is in a thread
-    current_message_ts = message.get("ts")  # Timestamp of this specific message
+    event_thread_ts = message.get("thread_ts")
+    current_message_ts = message.get("ts")
     channel_id = message.get("channel")
 
-    # Ignore messages from the bot itself, various subtypes, or messages without text
     if (
         user_id == bot_user_id
         or not text_raw
@@ -249,49 +321,44 @@ def handle_message_events(body, message, say, client):
     ):
         return
 
-    # If this message contains a direct @mention of our bot,
-    # the `app_mention` handler is preferred and should handle it.
-    # This prevents double processing.
     if bot_user_id and f"<@{bot_user_id}>" in text_raw:
         logger.info(
-            f"Message event (ts: {current_message_ts}) contains a bot mention. Assuming app_mention handler will process. Skipping in message handler."
+            f"MESSAGE event (ts: {current_message_ts}) contains a bot mention. "
+            f"Assuming app_mention handler will process. Skipping in message handler."
         )
         return
 
     thread_key_for_history = None
-    prompt_for_processing = text_raw  # This is passed as current_user_text_raw
+    prompt_for_processing = text_raw
 
     if channel_type == "im" and not event_thread_ts:
-        # This is a NEW direct message (not a reply in a DM thread)
-        # The history will be for a "thread" starting with this DM.
         thread_key_for_history = current_message_ts
+        # More detailed log for new DM
         logger.info(
-            f"Received new DM (using its ts {thread_key_for_history} as thread_key) from user {user_id}: '{text_raw}'"
+            f"MESSAGE event: New DM. User: {user_id}, Channel: {channel_id}, "
+            f"Message TS (used as thread_key): {thread_key_for_history}. Raw text: '{text_raw}'"
         )
     elif channel_type == "im" and event_thread_ts:
-        # This is a reply within an existing DM thread (and it doesn't mention the bot)
         thread_key_for_history = event_thread_ts
+        # More detailed log for DM reply
         logger.info(
-            f"Received reply in DM thread {thread_key_for_history} from user {user_id}: '{text_raw}'"
+            f"MESSAGE event: Reply in DM thread. User: {user_id}, Channel: {channel_id}, "
+            f"Message TS: {current_message_ts}, Thread TS: {thread_key_for_history}. Raw text: '{text_raw}'"
         )
-    elif (
-        event_thread_ts
-    ):  # It's a message in a channel/group thread, and DOES NOT mention the bot
-        # Current decision: Bot does not respond to non-mention messages in channel/group threads.
+    elif event_thread_ts:
         logger.info(
-            f"Received non-mention reply in channel/group thread {event_thread_ts}. Bot not configured to respond. Ignoring."
+            f"MESSAGE event: Non-mention reply in channel/group thread {event_thread_ts}. Bot not configured to respond. Ignoring."
         )
         return
     else:
-        # Message in a channel/group, not a DM, not in a thread, and not a mention. Ignore.
         logger.info(
-            f"Received non-mention, non-threaded, non-DM message from {user_id}. Bot not configured to respond. Ignoring."
+            f"MESSAGE event: Non-mention, non-threaded, non-DM message from {user_id}. Bot not configured to respond. Ignoring."
         )
         return
 
-    if not thread_key_for_history:  # Should only be true if logic above has a hole.
+    if not thread_key_for_history:
         logger.warning(
-            "Could not determine thread_key_for_history in message handler. Ignoring message."
+            f"MESSAGE event: Could not determine thread_key_for_history. User: {user_id}, Text: '{text_raw}'. Ignoring."
         )
         return
 
@@ -300,15 +367,14 @@ def handle_message_events(body, message, say, client):
     )
 
     try:
-        # For new DMs, thread_key_for_history = current_message_ts. This makes the reply start a thread.
-        # For replies in DM threads, thread_key_for_history = event_thread_ts.
         say(text=response_text, thread_ts=thread_key_for_history)
+        # Log successful response sending
         logger.info(
-            f"Sent LLM response directly to thread/DM {thread_key_for_history}."
+            f"Successfully sent LLM response via 'say' to thread/DM {thread_key_for_history} from message handler."
         )
     except Exception as e:
         logger.error(
-            f"Error sending LLM response to thread/DM {thread_key_for_history}: {e}",
+            f"Error sending LLM response via 'say' to thread/DM {thread_key_for_history} from message handler: {e}",
             exc_info=True,
         )
         try:
@@ -317,7 +383,9 @@ def handle_message_events(body, message, say, client):
                 thread_ts=thread_key_for_history,
             )
         except Exception as e_say:
-            logger.error(f"Failed to send even error response: {e_say}")
+            logger.error(
+                f"Failed to send even error response via 'say' from message handler: {e_say}"
+            )
 
 
 # Main Execution Block
@@ -344,6 +412,8 @@ if __name__ == "__main__":
         logger.error(
             "LLM or Retriever failed to initialize. Bot will have limited or no AI capabilities."
         )
+        # Decide if you want to exit or run with limited functionality
+        # exit(1)
     if not bot_user_id:
         logger.error(
             "Could not determine Bot User ID. History reconstruction and mention parsing will fail. Exiting."
