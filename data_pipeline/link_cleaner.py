@@ -13,15 +13,15 @@ def clean_s3_link(s3_link):
         return s3_link
 
     # 1. Remove the S3 prefix
-    path_component = s3_link[len(s3_prefix):]
+    path_component = s3_link[len(s3_prefix) :]
 
     # 2. Handle the specific case of the .md extension
     # e.g., "something.md" should become "something" before replacing other underscores
     if path_component.endswith(f"{file_extension}"):
         # Remove the underscore and the extension
         # For "name.md", this becomes "name"
-        path_component = path_component[:- (len(file_extension) )]
-    
+        path_component = path_component[: -(len(file_extension))]
+
     # 3. Replace all remaining underscores with slashes
     # For "docs.unity.rc.umass.edu!about.md", this becomes "docs.unity.rc.umass.edu/about"
     # For "docs.unity.rc.umass.edu_!documentation!cluster_specs.md", this becomes "docs.unity.rc.umass.edu/documentation/cluster_specs"
@@ -29,6 +29,7 @@ def clean_s3_link(s3_link):
 
     # 4. Prepend the web protocol
     return f"{web_protocol}{cleaned_path}"
+
 
 """
 # Test cases based on real file names in our S3 bucket:

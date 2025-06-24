@@ -25,8 +25,8 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 # --- End Logging Initialization ---
 
-
-st.title("🧠 Unity Chatbot")
+st.set_page_config(page_title="🧠 Unity HPC Chatbot")
+st.title("🧠 Unity HPC Chatbot")
 
 # Authentication Logic
 UNITY_USERNAME = os.getenv("UNITY_USERNAME")
@@ -76,6 +76,10 @@ st.sidebar.button(
     on_click=logout_action_with_logging,  # Changed to use the new function with logging
 )
 
+# Privacy Warning
+st.warning(
+    "⚠️ **Privacy Notice**: Do not share personal information. Conversation history may be stored for system improvement purposes."
+)
 
 # Initialize Bedrock client
 # Log Bedrock client initialization attempt
@@ -116,8 +120,8 @@ for i, message in enumerate(st.session_state.messages):
             st.markdown("---")
             st.markdown("**Sources**")
             for j, doc in enumerate(message["sources"]):
-                with st.expander(f"Source {j + 1}"):
-                    st.markdown(doc.page_content)
+                with st.expander(f"🔍 Source {j + 1}"):
+                    st.text(doc.page_content)
                     # Add source-specific feedback form
                     source_unique_key = f"{len(st.session_state.messages)}_source_{i}_{hash(doc.page_content) % 10000}"
                     # For historical messages, get the user question from the previous message
@@ -237,12 +241,12 @@ if prompt := st.chat_input("What is up?"):
                 # Log that streaming is starting
                 logger.info("Starting to stream response from main LLM.")
                 # chunk is part of a response received from LLM
-                for chunk in llm.stream(
-                    messages_for_main_llm
-                ):  # Use the correctly constructed messages
+                for chunk in llm.stream(messages_for_main_llm):
                     # add the text of it to our response
                     response += chunk.text()
-                    placeholder.text(response)  # Display intermediate streaming text
+                    placeholder.markdown(
+                        response
+                    )  # Display intermediate streaming text
 
                 # Log the full final response from LLM
                 logger.info(
@@ -254,13 +258,16 @@ if prompt := st.chat_input("What is up?"):
                 response = "Sorry, I encountered an error while generating the response."  # Fallback response
                 placeholder.error(response)
 
+            # Add disclaimer
+            st.markdown(
+                "\n\n* *Generative AI is experimental. Please use the inline citation links or the source text below to verify answers.*"
+            )
+
             # Display the sources used to answer the questions
             if relevant_docs:
                 st.markdown("---")
                 st.markdown("**Sources**")
-                for i_doc, doc in enumerate(
-                    relevant_docs
-                ):  # Changed loop variable to avoid conflict
+                for i_doc, doc in enumerate(relevant_docs):
                     with st.expander(f"🔍 Source {i_doc + 1}"):
                         st.text(doc.page_content)
                         source_unique_key = f"{len(st.session_state.messages)}_source_{i_doc}_{hash(doc.page_content) % 10000}"

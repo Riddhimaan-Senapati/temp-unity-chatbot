@@ -46,7 +46,7 @@ jobs:
           ECR_REPOSITORY: ${{ secrets.ECR_REPOSITORY || 'unity-chatbot' }}
           IMAGE_TAG: ${{ github.sha }}
         run: |
-          docker build -t $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG -f chatbot_dockerfile .
+          docker build -t $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG -f Dockerfiles/chatbot_dockerfile .
           docker push $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG
           docker tag $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG $ECR_REGISTRY/$ECR_REPOSITORY:latest
           docker push $ECR_REGISTRY/$ECR_REPOSITORY:latest
@@ -67,7 +67,7 @@ jobs:
           echo "Creating Chatbot CloudFormation stack..."
           aws cloudformation create-stack \
             --stack-name unity-chatbot-stack \
-            --template-body file://cloudformation-template-chatbot.yml \
+            --template-body file://cloudformation-templates/cloudformation-template-chatbot.yml \
             --tags Key=PROJECT,Value=ai4cw \
             --parameters \
               ParameterKey=DomainName,ParameterValue=${{ secrets.DOMAIN_NAME }} \
@@ -95,7 +95,7 @@ jobs:
           echo "Updating Chatbot CloudFormation stack..."
           aws cloudformation update-stack \
             --stack-name unity-chatbot-stack \
-            --template-body file://cloudformation-template-chatbot.yml \
+            --template-body file://cloudformation-templates/cloudformation-template-chatbot.yml \
             --tags Key=PROJECT,Value=ai4cw \
             --parameters \
               ParameterKey=DomainName,ParameterValue=${{ secrets.DOMAIN_NAME }} \
