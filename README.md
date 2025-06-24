@@ -1,8 +1,8 @@
-# Unity RAG Chatbot
+# 🧠 Unity RAG Chatbot
 
 This is the code repository for the RAG chatbot based on the Unity HPC documentation
 
-# Structure
+# 📂 Structure
 ```
 ├── README.md
 ├── README-DEPLOYMENT.md
@@ -15,6 +15,7 @@ This is the code repository for the RAG chatbot based on the Unity HPC documenta
 │ ├── dashboard.py
 ├── chatbot.py
 ├── slack_bot.py
+├── slack_scraper.py
 ├── chatbot_helper.py
 ├── automated_test.py
 ├── test_results/
@@ -26,19 +27,21 @@ This is the code repository for the RAG chatbot based on the Unity HPC documenta
 │ └── workflows/
 │     ├── deploy-chatbot.yml
 │     └── deploy-slackbot.yml
-├── cloudformation-template-chatbot.yml
-├── cloudformation-template-slackbot.yml
+├── cloudformation-templates/
+│ ├── cloudformation-template-chatbot.yml
+│ └── cloudformation-template-slackbot.yml
+├── Dockerfiles/
+│ ├── chatbot_dockerfile
+│ └── slackbot_dockerfile
 ├── .dockerignore
 ├── docker-compose.yaml
-├── chatbot_dockerfile
-├── slackbot_dockerfile
 ├── requirements.txt
 ├── LICENSE
 └── .gitignore
 ```
 
 
-## File Descriptions
+## 📄 File Descriptions
 
 *   **`README.md`**: The main documentation file for this project, providing an overview, setup instructions, and details about the codebase structure.
 *   **`data_pipeline/`**: This directory contains scripts responsible for data ingestion and processing.
@@ -46,9 +49,10 @@ This is the code repository for the RAG chatbot based on the Unity HPC documenta
     *   **`data_pipeline/scrapping_helper.py`**: Contains helper functions and utilities used by the scraping scripts within the `data_pipeline`.
     *   **`data_pipeline/link_cleaner.py`**: A script for cleaning and normalizing URLs and links found during the scraping process. Used in the chatbot, to clean URLs from the S3 filename for displaying to the user since it's not advised to use slashes in S3  filenames.
 *   **`pages/`**: This directory contains other pages for the streamlit app. This is how multi-page streamlit apps are made.
-    *   **`pages/dashboard.py`**: his file has the streamlit dashbaord to keep track of when a documentation link was last scraped, and has buttons to either scrape a specific URL again or scrape all URLs according to the logic in `data_pipeline/scrape_and_upload_to_s3.py`
+    *   **`pages/dashboard.py`**: The Streamlit dashboard with three tabs: User Feedback Analytics, Data Pipeline Management (for tracking scraped documentation), and Slack Conversations (for viewing and editing Slack channel conversations).
 *   **`chatbot.py`**: The core Streamlit application that implements the Retrieval-Augmented Generation (RAG) chatbot functionality.
 *   **`slack_bot.py`**: The core slack_bot code that implements the Retrieval-Augmented Generation (RAG) chatbot functionality in slack using the slack bolt library.
+*   **`slack_scraper.py`**: A script to scrape conversations from Slack channels and store them as markdown files in S3.
 *   **`chatbot_helper.py`**: This file contains modular functions and helper utilities used across the chatbot application, promoting code reusability and organization.
 *   **`automated_test.py`**: Contains automated tests for the chatbot, ensuring its functionality and reliability.
 *   **`test_results/`**: This directory stores the results of automated tests, such as comparison outcomes for different models.
@@ -56,8 +60,12 @@ This is the code repository for the RAG chatbot based on the Unity HPC documenta
     *   **`test_results/claude_comparison_results.md`**: A human-readable Markdown report summarizing the comparison results, with Claude 3.7 sonnet.
 *   **`documents/`**: This directory stores the scraped documentation in Markdown format, which serves as the knowledge base for the RAG chatbot.
 *   **`.dockerignore`**: Specifies files and directories that should be ignored by Docker when building images, similar to `.gitignore`.
-*   **`chatbot_dockerfile`**: Defines the steps to build the Docker image for the Streamlit chatbot application, specifying the base image, dependencies, and application setup.
-*   **`slackbot_dockerfile`**: Defines the steps to build the Docker image for the Slack bot application.
+*   **`cloudformation-templates/`**: Directory containing AWS CloudFormation templates for infrastructure deployment.
+    *   **`cloudformation-templates/cloudformation-template-chatbot.yml`**: AWS CloudFormation template that defines the infrastructure for the Streamlit chatbot, including VPC, ECS cluster, load balancer, and other AWS resources.
+    *   **`cloudformation-templates/cloudformation-template-slackbot.yml`**: AWS CloudFormation template that defines the infrastructure for the Slack bot, including VPC, ECS cluster, and other AWS resources.
+*   **`Dockerfiles/`**: Directory containing Docker configuration files.
+    *   **`Dockerfiles/chatbot_dockerfile`**: Defines the steps to build the Docker image for the Streamlit chatbot application, specifying the base image, dependencies, and application setup.
+    *   **`Dockerfiles/slackbot_dockerfile`**: Defines the steps to build the Docker image for the Slack bot application.
 *   **`.env.example`**: Template for the .env file without any of the key values.
 *   **`requirements.txt`**: Lists all the Python dependencies required to run the chatbot application, used for `pip install`.
 *   **`LICENSE`**: The license file for the project.
@@ -65,22 +73,20 @@ This is the code repository for the RAG chatbot based on the Unity HPC documenta
 *   **`README-DEPLOYMENT.md`**: Detailed instructions for deploying the application to AWS.
 *   **`.github/workflows/deploy-chatbot.yml`**: GitHub Actions workflow file that automates the CI/CD pipeline for deploying the Streamlit chatbot application to AWS.
 *   **`.github/workflows/deploy-slackbot.yml`**: GitHub Actions workflow file that automates the CI/CD pipeline for deploying the Slack bot application to AWS.
-*   **`cloudformation-template-chatbot.yml`**: AWS CloudFormation template that defines the infrastructure for the Streamlit chatbot, including VPC, ECS cluster, load balancer, and other AWS resources.
-*   **`cloudformation-template-slackbot.yml`**: AWS CloudFormation template that defines the infrastructure for the Slack bot, including VPC, ECS cluster, and other AWS resources.
 
 
-# Deployment to AWS
+# 🏗️ Deployment to AWS
 
 The applications can be automatically deployed to AWS using the GitHub Actions workflows and CloudFormation templates included in this repository. For detailed deployment instructions, see [README-DEPLOYMENT.md](README-DEPLOYMENT.md).
 
-## Deployment Architecture
+## 🏗️ Deployment Architecture
 
 This project uses a dual-deployment architecture:
 
 1. **Streamlit Chatbot** - A web application with public access via an Application Load Balancer
 2. **Slack Bot** - A background service that connects to Slack without public internet access
 
-## Deployment Process
+## ⚙️ Deployment Process
 
 Both applications are deployed independently through separate GitHub Actions workflows that run when:
 - Code is pushed to the main branch
@@ -99,7 +105,7 @@ The CloudFormation templates provision all necessary AWS resources including:
 - IAM roles and policies
 - CloudWatch logs
 
-# Installation and usage(for the streamlit chatbot and dashboard)
+# 🛠️ Installation and usage(for the streamlit chatbot and dashboard)
 
 There are two ways to run the chatbot: With Docker or without
 
@@ -107,7 +113,7 @@ There are two ways to run the chatbot: With Docker or without
 <summary>Docker</summary>
  
 
-## 1. Prerequisites
+## 1️⃣ Prerequisites
 
 Make sure that you have docker desktop installed and running. 
 
@@ -123,7 +129,7 @@ and then fill the .env file with AWS credentials, knowledge base id, as well as 
 
 Remember to never commit .env files
 
-## 2. Run the streamlit Application
+## 2️⃣ Run the streamlit Application
 
 Run the streamlit application using the following command:
 
@@ -131,11 +137,11 @@ Run the streamlit application using the following command:
 docker-compose up --build
 ```
 
-## 3. Access the Application
+## 3️⃣ Access the Application
 
 Once the server is running, you can access the streamlit application in your web browser at: `http://localhost:8501/`
 
-## 4. Stopping the application
+## 4️⃣ Stopping the application
 
 You can end the application using CTRL+C . Make sure to have the streamlit application website is open in the browser otherwise the command doesn't work, in which case, you need to kill the terminal.
 
@@ -144,7 +150,7 @@ You can end the application using CTRL+C . Make sure to have the streamlit appli
 <details>
 <summary>Without Docker</summary>
 
-## 1. Prerequisites
+## 1️⃣ Prerequisites
 
 Make sure you have the following installed on your machine:
 
@@ -163,14 +169,14 @@ and then fill the .env file with AWS credentials, knowledge base id, as well as 
 
 Remember to never commit .env files
 
-## 2. Create a Virtual Environment
+## 2️⃣ Create a Virtual Environment
 Create a virtual environment to isolate your project dependencies:
 
 ```
 python -m venv .venv
 ```
 
-## 3. Activate the Virtual Environment
+## 3️⃣ Activate the Virtual Environment
 
 Activate the virtual environment:
 
@@ -201,7 +207,7 @@ source .venv/bin/activate
 
 </details>
 
-## 4. Install/Update Dependencies
+## 4️⃣ Install/Update Dependencies
 
 Install the required packages from requirements.txt:
 
@@ -216,7 +222,7 @@ virtual environment and run the following command to update the requirements.txt
 pip freeze > requirements.txt
 ```
 
-## 5. Run the streamlit Application
+## 5️⃣ Run the streamlit Application
 
 Run the streamlit application using the following command:
 
@@ -224,15 +230,15 @@ Run the streamlit application using the following command:
 streamlit run chatbot.py
 ```
 
-## 6. Access the Application
+## 6️⃣ Access the Application
 
 Once the server is running, you can access the streamlit application in your web browser at: `http://localhost:8501/`
 
-## 7. Stopping the Application
+## 7️⃣ Stopping the Application
 
 You can end the application using CTRL+C . Make sure to have the streamlit application website is open in the browser otherwise the command doesn't work, in which case, you need to kill the terminal.
 
-## 8. Deactivating the Virtual Environment
+## 8️⃣ Deactivating the Virtual Environment
 
 When you're done working, you can deactivate the virtual environment by running:
 
@@ -242,9 +248,9 @@ deactivate
 </details>
 
 
-# Installation and usage(for the slack chatbot)
+# 🛠️ Installation and usage(for the slack chatbot)
 
-## 1. Prerequisites
+## 1️⃣ Prerequisites
 
 Make sure you have the following installed on your machine:
 
@@ -262,14 +268,14 @@ You also need to setup a slack app beforehand and have the slack bot and slack a
 
 Remember to never commit .env files
 
-## 2. Create a Virtual Environment
+## 2️⃣ Create a Virtual Environment
 Create a virtual environment to isolate your project dependencies:
 
 ```
 python -m venv .venv
 ```
 
-## 3. Activate the Virtual Environment
+## 3️⃣ Activate the Virtual Environment
 
 Activate the virtual environment:
 
@@ -300,7 +306,7 @@ source .venv/bin/activate
 
 </details>
 
-## 4. Install/Update Dependencies
+## 4️⃣ Install/Update Dependencies
 
 Install the required packages from requirements.txt:
 
@@ -315,7 +321,7 @@ virtual environment and run the following command to update the requirements.txt
 pip freeze > requirements.txt
 ```
 
-## 5. Run the Slack bot 
+## 5️⃣ Run the Slack bot 
 
 Run the slack bot using the following command:
 
@@ -323,11 +329,11 @@ Run the slack bot using the following command:
 python slack_bot.py
 ```
 
-## 6. Stopping the Application
+## 6️⃣ Stopping the Application
 
 You can end the application using CTRL+C . 
 
-## 7. Deactivating the Virtual Environment
+## 7️⃣ Deactivating the Virtual Environment
 
 When you're done working, you can deactivate the virtual environment by running:
 

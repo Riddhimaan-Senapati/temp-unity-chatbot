@@ -227,9 +227,15 @@ def process_user_message_with_slack_history(
         ai_message_content = (
             ai_response.content if hasattr(ai_response, "content") else str(ai_response)
         )
+
+        # Add disclaimer
+        disclaimer = "\n\n* *Generative AI is experimental. Please verify answers using official documentation.*"
+
+        full_response = ai_message_content + disclaimer
+
         # Log the LLM's final response content
         logger.info(f"LLM response for thread {thread_ts_key}: '{ai_message_content}'")
-        return ai_message_content
+        return full_response
     except Exception as e:
         logger.error(
             f"Error during LLM invocation for thread {thread_ts_key}: {e}",

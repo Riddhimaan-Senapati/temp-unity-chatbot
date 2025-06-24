@@ -18,5 +18,15 @@
     "comments": "I found this response useful.",
     "timestamp": "2025-06-16T17:24:05.238875",
     "feedback_id": 2
+  },
+  {
+    "question": "hey",
+    "response": "I'm here to help with questions about Unity and High Performance Computing. Could you please ask a specific question about Unity HPC? I can provide information about the cluster specifications, storage resources, job submission, software, or other Unity-related topics.",
+    "sources": [],
+    "rating": 3,
+    "feedback_type": "detailed",
+    "comments": "This was helpful.",
+    "timestamp": "2025-06-18T09:13:58.555404",
+    "feedback_id": 3
   }
 ]

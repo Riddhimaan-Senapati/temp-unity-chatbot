@@ -46,7 +46,7 @@ jobs:
           ECR_REPOSITORY: ${{ secrets.SLACKBOT_ECR_REPOSITORY || 'unity-slackbot' }}
           IMAGE_TAG: ${{ github.sha }}
         run: |
-          docker build -t $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG -f slackbot_dockerfile .
+          docker build -t $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG -f Dockerfiles/slackbot_dockerfile .
           docker push $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG
           docker tag $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG $ECR_REGISTRY/$ECR_REPOSITORY:latest
           docker push $ECR_REGISTRY/$ECR_REPOSITORY:latest
@@ -67,7 +67,7 @@ jobs:
           echo "Creating Slackbot CloudFormation stack..."
           aws cloudformation create-stack \
             --stack-name unity-slackbot-stack \
-            --template-body file://cloudformation-template-slackbot.yml \
+            --template-body file://cloudformation-templates/cloudformation-template-slackbot.yml \
             --tags Key=PROJECT,Value=ai4cw \
             --parameters \
               ParameterKey=EnvironmentName,ParameterValue=prod \
@@ -95,7 +95,7 @@ jobs:
           echo "Updating Slackbot CloudFormation stack..."
           aws cloudformation update-stack \
             --stack-name unity-slackbot-stack \
-            --template-body file://cloudformation-template-slackbot.yml \
+            --template-body file://cloudformation-templates/cloudformation-template-slackbot.yml \
             --tags Key=PROJECT,Value=ai4cw \
             --parameters \
               ParameterKey=EnvironmentName,ParameterValue=prod \
