@@ -93,7 +93,7 @@ jobs:
         if: steps.check-slackbot-stack.outputs.stack_exists == 'true'
         run: |
           echo "Updating Slackbot CloudFormation stack..."
-          aws cloudformation update-stack \
+          update_output=$(aws cloudformation update-stack \
             --stack-name unity-slackbot-stack \
             --template-body file://cloudformation-templates/cloudformation-template-slackbot.yml \
             --tags Key=PROJECT,Value=ai4cw \
@@ -112,10 +112,11 @@ jobs:
               ParameterKey=AWSAccessKeyID,ParameterValue=${{ secrets.AWS_ACCESS_KEY_ID }} \
               ParameterKey=AWSSecretAccessKey,ParameterValue=${{ secrets.AWS_SECRET_ACCESS_KEY }} \
               ParameterKey=DesiredCount,ParameterValue=1 \
-            --capabilities CAPABILITY_IAM CAPABILITY_NAMED_IAM || echo "No updates to be performed"
+            --capabilities CAPABILITY_IAM CAPABILITY_NAMED_IAM 2>&1) || echo "No updates to be performed"
           
-          # Wait for stack update to complete if an update was performed
-          if [ $? -eq 0 ]; then
+          if [[ "$update_output" != *"No updates"* ]]; then
             echo "Waiting for stack update to complete..."
             aws cloudformation wait stack-update-complete --stack-name unity-slackbot-stack
+          else
+            echo "No updates were needed, skipping wait."
           fi
