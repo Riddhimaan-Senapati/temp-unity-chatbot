@@ -1,12 +1,15 @@
 import os
 import json
 from dotenv import load_dotenv
-from chatbot_helper import (
+from utils.chatbot_helper import (
     initialize_bedrock_client,
     initialize_knowledge_base_retriever,
     query_without_system_prompt,
     query_with_system_prompt,
+    initialize_llm,
 )
+
+from utils.prompts import question_system_prompt
 
 # Load environment variables
 load_dotenv()
@@ -121,14 +124,53 @@ def test_model_on_database(model_name):
         }
 
         # Process each message in the thread
+        conversation_context = []
+
         for msg_idx, question in enumerate(thread["messages"]):
             print(
                 f"  Question {msg_idx + 1}/{len(thread['messages'])}: {question[:25]}..."
             )
 
-            # Query with system prompt
+            # Generate optimized search query using conversation history (duplicate from chatbot.py)
+            llm = initialize_llm(client=client, model_id=model_id)
+            optimized_query = question  # Fallback
+
+            if conversation_context:
+                # Build query messages with conversation history
+                query_messages = [
+                    {"role": "system", "content": question_system_prompt},
+                    *[
+                        {
+                            "role": "user" if i % 2 == 0 else "assistant",
+                            "content": ctx["question"] if i % 2 == 0 else ctx["answer"],
+                        }
+                        for i, ctx in enumerate(
+                            conversation_context[-3:]
+                        )  # Last 3 Q&A pairs
+                        for _ in [0, 1]  # Create both user and assistant messages
+                    ][:-1],  # Remove last assistant message to end with user
+                    {
+                        "role": "user",
+                        "content": f"Based on this conversation history, generate a search query for: {question}",
+                    },
+                ]
+
+                try:
+                    # Get optimized query from secondary LLM
+                    query_response = llm.invoke(query_messages)
+                    optimized_query_content = (
+                        query_response.content.strip()
+                        if hasattr(query_response, "content")
+                        else str(query_response).strip()
+                    )
+                    if optimized_query_content:
+                        optimized_query = optimized_query_content
+                except Exception:
+                    pass  # Fall back to original question
+
+            # Query with system prompt using optimized query
             response, sources, metrics = query_with_system_prompt(
-                client, retriever, question, model_id
+                client, retriever, optimized_query, model_id
             )
 
             # Calculate cost
@@ -140,6 +182,9 @@ def test_model_on_database(model_name):
 
             # Add cost to metrics
             metrics.update(cost_info)
+
+            # Store in conversation context
+            conversation_context.append({"question": question, "answer": response})
 
             # Store message result
             message_result = {
@@ -1028,23 +1073,6 @@ def system_prompt_comparison_json_to_markdown(json_file):
     return md_file
 
 
-# List available models if requested
-def list_models():
-    print("Available models:")
-    for model_name in MODELS.keys():
-        print(f"- {model_name}")
-    return
-
-
-# List available threads if requested
-def list_threads():
-    all_threads = load_conversation_threads()
-    print("Available conversation threads:")
-    for i, thread in enumerate(all_threads):
-        print(f"{i}: {thread['name']}")
-    return
-
-
 # Example usage:
 ### Use list_models() to see available models
 ### Use list_threads() to see available conversation threads
@@ -1053,10 +1081,10 @@ def list_threads():
 ### Use test_model_with_without_system_prompt(model_name, thread_name) to test one model with/without system prompt
 if __name__ == "__main__":
     # Example: Test a single model on all conversation threads
-    # test_model_on_database("claude-4-sonnet")
+    test_model_on_database("claude-4-sonnet")
 
     # Example: Test all models on a single thread
-    # compare_models("unity_basics")
+    # compare_models("Unity basics")
 
     # Example: Test a specific model with and without system prompt on a chosen thread
-    test_model_with_without_system_prompt("claude-4-sonnet", "Unity basics")
+    # test_model_with_without_system_prompt("claude-4-sonnet", "Unity basics")

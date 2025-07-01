@@ -1,0 +1,27 @@
+[
+  {
+    "question": "How do I connect to the Angwin server and what should I expect during account activation? My SSH connection is timing out after IT created my account today.",
+    "answers": [
+      "Connection to Angwin requires VPN access. Make sure you're connected to the VPN before attempting to SSH to the server.",
+      "If you're experiencing connectivity issues, it may be related to network sluggishness at the MGHPCC facility that can affect multiple systems in the area."
+    ]
+  },
+  {
+    "question": "I need to install packages like yt-dlp and ffmpeg on Unity but they require sudo. Am I allowed to use sudo, or should I use the software request form?",
+    "answers": [
+      "Users don't have sudo access on Unity. You have two options: submit a software request form to have the packages installed system-wide, or use conda to install the packages in your user space without requiring administrator privileges."
+    ]
+  },
+  {
+    "question": "How do I run pytest tests for a Python plugin that requires the core application to be loaded? The plugin test code is found by pytest when running tests for the core application, but the tests fail because the plugin itself is not loaded in the test environment.",
+    "answers": [
+      "Set up a pytest fixture for the plugin. This will ensure the plugin is properly loaded and available during test execution."
+    ]
+  },
+  {
+    "question": "I'm having trouble logging into the Azure portal. I logged out and logged back in but keep getting errors. How can I fix this login issue?",
+    "answers": [
+      "Try clearing your browser cache and cookies. Also double check that you're logging in with the @rescloud.umass.edu email account."
+    ]
+  }
+]

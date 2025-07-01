@@ -5,11 +5,11 @@ from botocore.exceptions import NoCredentialsError, ClientError
 import os
 from dotenv import load_dotenv
 import pandas as pd
-from data_pipeline.scrape_and_upload_to_s3 import (
+from utils.data_pipeline.scrape_and_upload_to_s3 import (
     run_scrape_and_upload_pipeline,
     scrape_and_upload_link,
 )
-from feedback import display_feedback_dashboard
+from utils.feedback import display_feedback_dashboard
 
 load_dotenv()
 
@@ -338,7 +338,7 @@ with tab3:
             scraped_time = slack_data["scraped_datetime"]
             if scraped_time != "Unknown":
                 try:
-                    dt = datetime.fromisoformat(scraped_time)
+                    dt = datetime.datetime.fromisoformat(scraped_time)
                     scraped_time = dt.strftime("%Y-%m-%d %H:%M:%S")
                 except Exception as e:
                     st.error(f"Error parsing scraped datetime: {e}")
