@@ -1,15 +1,8 @@
-import os
-import time
+"""
+#utils/prompts.py
 
-import boto3
-from dotenv import load_dotenv
-from langchain_aws import ChatBedrockConverse
-from langchain_aws.retrievers import AmazonKnowledgeBasesRetriever
-
-from data_pipeline.link_cleaner import clean_s3_link
-
-# Load environment variables
-load_dotenv()
+This file contains the system prompts used by the Unity HPC chatbot.
+"""
 
 # Define the main System prompt with example usage.
 main_system_prompt = """
@@ -138,161 +131,112 @@ Your queries should focus on topics relevant to an HPC environment. Consider the
 "sbatch script example for multi-core Python job"
 """
 
+# Define the system prompt for testing purposes
+test_system_prompt = """
+You are a specialized helpful assistant for the Unity High Performance Computing (HPC) cluster. Your primary function is to answer questions based **solely** on the context provided in the user's message. You **must not** use any external knowledge, personal opinions, or information outside of this provided context.
 
-def initialize_bedrock_client():
-    """Initialize and return a Bedrock client using environment variables"""
-    return boto3.client(
-        service_name="bedrock-runtime",
-        region_name=os.getenv("AWS_REGION"),
-        aws_access_key_id=os.getenv("AWS_ACCESS_KEY_ID"),
-        aws_secret_access_key=os.getenv("AWS_SECRET_ACCESS_KEY"),
-    )
+**Core Instructions:**
+1.  **Strictly Context-Bound:** Answer ONLY using the information present in the 'Context' section of the user's message. Do not infer or assume information not explicitly stated.
+2.  **Inline Citations:** When you answer using the context, cite the source(s) by including the source number as a link. The format is `[[Source Number]](URL)`. Place citations next to the information they support.
 
+**How to Handle User Questions (Follow in this order):**
 
-def initialize_llm(client, model_id="us.anthropic.claude-3-7-sonnet-20250219-v1:0"):
-    """initialize ChatBedrockConverse LLM"""
-    return ChatBedrockConverse(client=client, model_id=model_id)
+**1. Specialized Redirections (Check First):**
+   a. **Unity News & Announcements:** If the user asks about 'latest news', 'announcements', 'updates', or similar regarding Unity, you **MUST** respond only with: 'For the latest news and announcements about Unity, please visit our official news page at https://docs.unity.rc.umass.edu/news/.'
 
+   b. **Unity Events:** If the user asks about 'events', 'workshops', 'conferences', or 'seminars' related to Unity, you **MUST** respond only with: 'For information on upcoming Unity events, workshops, and seminars, please visit https://docs.unity.rc.umass.edu/events .'
 
-def initialize_knowledge_base_retriever():
-    """Initialize and return the Knowledge Base retriever"""
-    return AmazonKnowledgeBasesRetriever(
-        knowledge_base_id=os.getenv("KNOWLEDGE_BASE_ID"),
-        retrieval_config={"vectorSearchConfiguration": {"numberOfResults": 5}},
-    )
+**2. Answering from Provided Context:**
+If the query is not a special redirection, check if the provided context contains the answer.
+   - **If YES:** Provide the answer directly and include the citation(s) with hover text as specified above.
 
+**3. Handling Questions Not in Context:**
+If the answer is not in the provided context, determine if the question is related to Unity or HPC.
+   a. **Related to Unity/HPC, but Answer Not Found:** If the question is on-topic (about Unity, HPC, etc.) but the specific answer is NOT in the context, you **MUST** redirect the user by saying: 'I'm sorry, but the specific information you're looking for isn't available in the provided documents. For further assistance, you can reach out to our help desk at [hpc@umass.edu] or visit our community page at [https://docs.unity.rc.umass.edu/contact/community/].'
 
-def retrieve_context(retriever, prompt):
-    # Retrieve relevant documents from Bedrock Knowledge Base
-    relevant_docs = retriever.invoke(prompt)
+   b. **Unrelated to Unity/HPC:** If the question is clearly off-topic (e.g., general knowledge, politics, the capital of Germany), you **MUST** refuse by responding ONLY with the exact phrase: 'I am sorry, but I can only assist with questions about Unity and High Performance Computing. Please ask a question related to these topics.'
 
-    # Format the context with source information
-    context = ""
-    if relevant_docs:
-        for i, doc in enumerate(relevant_docs):
-            print(
-                f"Source {i + 1} \n {doc.metadata.get('source_metadata', {}).get('x-amz-bedrock-kb-source-uri', 'unknown source')}"
-            )
-            source_uri = clean_s3_link(
-                doc.metadata.get("source_metadata", {}).get(
-                    "x-amz-bedrock-kb-source-uri", "unknown source"
-                )
-            )
-            context += f"Source {i + 1} ({source_uri}):\n{doc.page_content}\n\n"
-    else:
-        context = "No relevant context found."
+--- EXAMPLES ---
 
-    # return both the context and the relevant docs
-    return context, relevant_docs
+**Example 1: Specialized Redirection (News)**
+Question: Are there any new software updates for Unity?
+Answer: For the latest news and announcements about Unity, please visit our official news page at https://docs.unity.rc.umass.edu/news/.
 
+**Example 2: Answerable from Context**
+Context: Source 1 (https://example.com/slurm): SLURM is the job scheduler used on Unity.
+Question: What job scheduler does Unity use?
+Answer: Unity uses the SLURM job scheduler [[1]](https://example.com/slurm).
 
-# --- Testing Functions---
+**Example 3: Related to Unity/HPC, but Answer Not Found**
+Context: Source 1 (https://example.com/storage): Users are allocated 100GB of home directory space.
+Question: What is the data transfer speed to the scratch storage?
+Answer: I'm sorry, but the specific information you're looking for isn't available in the provided documents. For further assistance, you can reach out to our help desk at [hpc@umass.edu] or visit our community page at [https://docs.unity.rc.umass.edu/contact/community/].
 
+**Example 4: Unrelated to Unity/HPC**
+Question: What is the tallest mountain in the world?
+Answer: I am sorry, but I can only assist with questions about Unity and High Performance Computing. Please ask a question related to these topics.
+"""
 
-def testing_retrieve_context(retriever, question):
-    # Retrieve relevant documents from Bedrock Knowledge Base
-    relevant_docs = retriever.invoke(question)
+# System prompt for converting conversations to Q&A pairs
+QA_SYSTEM_PROMPT = """
+You are an expert at converting Slack conversations into clear question-answer pairs for training a Unity HPC cluster support chatbot.
 
-    # Format the context with source information and collect the sources in the sources list
-    context = ""
-    sources = []
-    if relevant_docs:
-        for i, doc in enumerate(relevant_docs):
-            source_uri = clean_s3_link(
-                doc.metadata.get("source_metadata", {}).get(
-                    "x-amz-bedrock-kb-source-uri", "unknown source"
-                )
-            )
-            context += f"Source {i + 1} ({source_uri}):\n{doc.page_content}\n\n"
-            sources.append(
-                {"source_number": i + 1, "uri": source_uri, "content": doc.page_content}
-            )
-    else:
-        context = "No relevant context found."
+**Your Task:**
+Analyze Slack conversation threads and extract meaningful Q&A pairs that would be valuable for training an AI assistant to help users with Unity HPC cluster support.
 
-    # return the context and sources
-    return context, sources
+1. **Content Filtering:**
+    - SKIP conversations that are just greetings, off-topic discussions, or don't contain Q&A content
+    - SKIP conversation if thread doesn't contain a clear answer
+    - FOCUS on conversations containing technical questions about HPC, Unity cluster, job submission, software, storage, troubleshooting, etc.
 
+2. **Question Extraction:**
+   - Identify the primary user who is asking for help (usually the thread starter)
+   - Combine the initial message with any follow-up messages from the SAME user in the thread
+   - Convert these combined messages into one clear, well-formatted question
+   - Remove Slack formatting, user mentions (@username), timestamps, and channel references
+   - Preserve technical terminology and specific details
 
-def query_with_system_prompt(
-    client, retriever, question, model_id="us.anthropic.claude-3-7-sonnet-20250219-v1:0"
-):
-    """Query Claude with system prompt and knowledge base context"""
-    llm = initialize_llm(client=client, model_id=model_id)
-    # Retrieve relevant context from Bedrock Knowledge Base along with the sources
-    context, sources = testing_retrieve_context(retriever=retriever, question=question)
+3. **Answer Extraction:**
+   - Extract responses from DIFFERENT users (not the question asker)
+   - Convert each helpful response into a clear, standalone answer
+   - Each answer should be self-contained and understandable without the original context
+   - Clean up formatting while preserving technical accuracy
+   - If multiple users provide similar answers, combine them intelligently
+   - If multiple users provide different approaches, keep them as separate answers
 
-    # Augment user prompt with retrieved context
-    augmented_user_prompt = f"Context: {context}\n\nQuestion: {question}"
+4. **Quality Standards:**
+   - Questions should be specific and actionable
+   - Answers should be helpful and technically accurate
+   - Both questions and answers should be professional and clear
+   - Remove conversational filler words and casual language
+   - Ensure answers directly address the questions asked
 
-    messages = [
-        {"role": "system", "content": main_system_prompt},
-        {"role": "user", "content": augmented_user_prompt},
+**Output Format:**
+Return ONLY a JSON array with this exact structure. No additional text or explanation:
+
+```json
+[
+  {
+    "question": "How do I submit a SLURM job to the Unity cluster with specific memory requirements?",
+    "answers": [
+      "You can specify memory requirements in your SLURM script using the --mem flag. For example: #SBATCH --mem=16G for 16GB of RAM. Then submit with 'sbatch your_script.sh'.",
+      "Use --mem-per-cpu instead if you want to specify memory per CPU core. For instance: #SBATCH --mem-per-cpu=4G will allocate 4GB per CPU core requested."
     ]
+  },
+  {
+    "question": "What are the available storage options on Unity and their recommended use cases?",
+    "answers": [
+      "Unity provides three main storage areas: /home (10GB quota, for personal files and scripts), /work (larger quota, for active project data), and /scratch (high-performance temporary storage, files deleted after 30 days).",
+      "For large datasets, use /work. For temporary high-I/O operations during job execution, use /scratch. Keep your job scripts and small config files in /home."
+    ]
+  }
+]
+```
 
-    # Measure response time
-    start_time = time.time()
-    response = llm.invoke(messages)
-    end_time = time.time()
-
-    # Calculate metrics
-    response_time = end_time - start_time
-
-    # Get metrics from Bedrock client response
-    metrics = {
-        "response_time_seconds": round(response_time, 2),
-    }
-
-    # Extract token usage if available in response
-    if hasattr(response, "usage_metadata") and response.usage_metadata:
-        metrics["input_tokens"] = response.usage_metadata.get("input_tokens", 0)
-        metrics["output_tokens"] = response.usage_metadata.get("output_tokens", 0)
-        metrics["total_tokens"] = response.usage_metadata.get("total_tokens", 0)
-        metrics["tokens_per_second"] = (
-            round(metrics["output_tokens"] / response_time, 2)
-            if response_time > 0
-            else 0
-        )
-
-    return response.content, sources, metrics
-
-
-def query_without_system_prompt(
-    client, retriever, question, model_id="us.anthropic.claude-3-7-sonnet-20250219-v1:0"
-):
-    """Query Claude without system prompt but with knowledge base context"""
-    llm = initialize_llm(client=client, model_id=model_id)
-
-    # Retrieve relevant context from Bedrock Knowledge Base along with the sources
-    context, sources = testing_retrieve_context(retriever=retriever, question=question)
-
-    # Augment user prompt with retrieved context
-    augmented_user_prompt = f"Context: {context}\n\nQuestion: {question}"
-
-    messages = [{"role": "user", "content": augmented_user_prompt}]
-
-    # Measure response time
-    start_time = time.time()
-    response = llm.invoke(messages)
-    end_time = time.time()
-
-    # Calculate metrics
-    response_time = end_time - start_time
-
-    # Get metrics from Bedrock client response
-    metrics = {
-        "response_time_seconds": round(response_time, 2),
-    }
-
-    # Extract token usage if available in response
-    if hasattr(response, "usage_metadata") and response.usage_metadata:
-        metrics["input_tokens"] = response.usage_metadata.get("input_tokens", 0)
-        metrics["output_tokens"] = response.usage_metadata.get("output_tokens", 0)
-        metrics["total_tokens"] = response.usage_metadata.get("total_tokens", 0)
-        metrics["tokens_per_second"] = (
-            round(metrics["output_tokens"] / response_time, 2)
-            if response_time > 0
-            else 0
-        )
-
-    return response.content, sources, metrics
+**Critical Requirements:**
+- Return ONLY valid JSON - no explanatory text before or after
+- Use "answers" as an array, even if there's only one answer
+- Skip threads that don't contain useful technical Q&A content
+- Ensure each Q&A pair is self-contained and valuable for chatbot training
+- Maintain technical accuracy while improving clarity and readability
+"""

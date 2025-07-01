@@ -6,14 +6,14 @@ from langchain_core.messages import AIMessage, HumanMessage, SystemMessage
 from slack_bolt import App
 from slack_bolt.adapter.socket_mode import SocketModeHandler
 
-from chatbot_helper import (
+from utils.chatbot_helper import (
     initialize_bedrock_client,
     initialize_knowledge_base_retriever,
     initialize_llm,
-    question_system_prompt,
     retrieve_context,
-    slack_system_prompt,
 )
+
+from utils.prompts import question_system_prompt, slack_system_prompt
 
 # Load Environment Variables
 load_dotenv()

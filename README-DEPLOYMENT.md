@@ -2,6 +2,22 @@
 
 This guide explains how to deploy both the Unity Chatbot and Slackbot applications to AWS using the CI/CD pipelines set up with GitHub Actions.
 
+## 📋 Table of Contents
+
+- [📂 Deployment Architecture](#-deployment-architecture)
+- [📋 Prerequisites](#-prerequisites)
+- [🔧 Step 1: Set Up Required AWS Resources](#-step-1-set-up-required-aws-resources)
+  - [🔐 1.1 Create SSL Certificate](#-11-create-ssl-certificate-for-chatbot-only)
+  - [🌐 1.2 Set Up Route 53 Hosted Zone](#-12-set-up-route-53-hosted-zone-for-chatbot-only)
+- [🔑 Step 2: Configure GitHub Secrets](#-step-2-configure-github-secrets)
+- [🚀 Step 3: Deploy Your Applications](#-step-3-deploy-your-applications)
+- [✅ Step 4: Verify Deployments](#-step-4-verify-deployments)
+  - [🌐 Chatbot Verification](#-chatbot-verification)
+  - [💬 Slackbot Verification](#-slackbot-verification)
+- [🔧 Troubleshooting](#-troubleshooting)
+- [🔄 Updating the Applications](#-updating-the-applications)
+- [🧹 Cleaning Up](#-cleaning-up)
+
 ## 📂 Deployment Architecture
 
 This project uses a dual-deployment architecture:

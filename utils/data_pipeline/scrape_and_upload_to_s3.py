@@ -6,7 +6,7 @@ from dotenv import load_dotenv
 import io  # Used to treat string content like a file object
 import datetime
 
-from data_pipeline.scrapping_helper import (
+from utils.data_pipeline.scrapping_helper import (
     fetch_html,
     extract_links_from_html,
     extract_text_content,

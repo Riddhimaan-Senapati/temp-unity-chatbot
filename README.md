@@ -2,21 +2,39 @@
 
 This is the code repository for the RAG chatbot based on the Unity HPC documentation
 
+## 📋 Table of Contents
+
+- [📂 Structure](#-structure)
+- [📄 File Descriptions](#-file-descriptions)
+- [🏗️ Deployment to AWS](#️-deployment-to-aws)
+  - [🏗️ Deployment Architecture](#️-deployment-architecture)
+  - [⚙️ Deployment Process](#️-deployment-process)
+- [🛠️ Installation and usage (Streamlit Chatbot)](#️-installation-and-usagefor-the-streamlit-chatbot-and-dashboard)
+- [🛠️ Installation and usage (Slack Chatbot)](#️-installation-and-usagefor-the-slack-chatbot)
+
+
 # 📂 Structure
 ```
 ├── README.md
 ├── README-DEPLOYMENT.md
-├── data_pipeline/
-│ ├── scrape_and_upload_to_s3.py
-│ ├── scrapping_helper.py
-│ └── link_cleaner.py
 ├── .env.example (Template for the .env file)
 ├── pages/
 │ ├── dashboard.py
+├── utils/
+│ ├── chatbot_helper.py
+│ ├── feedback.py
+| |── prompts.py
+│ └── data_pipeline/
+│     ├── scrape_and_upload_to_s3.py
+│     ├── scrapping_helper.py
+│     └── link_cleaner.py
+├── qa_pairs/
+│ ├── slack_qa_generator.py
+│ ├── slack_conversations.md
+| |── slack_qa_pairs_{}_{}.json
 ├── chatbot.py
 ├── slack_bot.py
 ├── slack_scraper.py
-├── chatbot_helper.py
 ├── automated_test.py
 ├── test_results/
 │ ├── claude_comparison_results.json
@@ -44,16 +62,23 @@ This is the code repository for the RAG chatbot based on the Unity HPC documenta
 ## 📄 File Descriptions
 
 *   **`README.md`**: The main documentation file for this project, providing an overview, setup instructions, and details about the codebase structure.
-*   **`data_pipeline/`**: This directory contains scripts responsible for data ingestion and processing.
-    *   **`data_pipeline/scrape_and_upload_to_s3.py`**: A script designed to scrape documentation content and upload it to an AWS S3 bucket.
-    *   **`data_pipeline/scrapping_helper.py`**: Contains helper functions and utilities used by the scraping scripts within the `data_pipeline`.
-    *   **`data_pipeline/link_cleaner.py`**: A script for cleaning and normalizing URLs and links found during the scraping process. Used in the chatbot, to clean URLs from the S3 filename for displaying to the user since it's not advised to use slashes in S3  filenames.
 *   **`pages/`**: This directory contains other pages for the streamlit app. This is how multi-page streamlit apps are made.
     *   **`pages/dashboard.py`**: The Streamlit dashboard with three tabs: User Feedback Analytics, Data Pipeline Management (for tracking scraped documentation), and Slack Conversations (for viewing and editing Slack channel conversations).
+*   **`utils/`**: This directory contains utility functions and helper modules used across the application.
+    *   **`utils/chatbot_helper.py`**: Contains modular functions and helper utilities used across the chatbot application, promoting code reusability and organization.
+    *   **`utils/prompts.py`**: Contains the system prompt used throughout the application
+    *   **`utils/feedback.py`**: Handles user feedback collection and analytics functionality for the chatbot interface.
+    *   **`utils/data_pipeline/`**: This subdirectory contains scripts responsible for data ingestion and processing.
+        *   **`utils/data_pipeline/scrape_and_upload_to_s3.py`**: A script designed to scrape documentation content and upload it to an AWS S3 bucket.
+        *   **`utils/data_pipeline/scrapping_helper.py`**: Contains helper functions and utilities used by the scraping scripts within the data pipeline.
+        *   **`utils/data_pipeline/link_cleaner.py`**: A script for cleaning and normalizing URLs and links found during the scraping process. Used in the chatbot to clean URLs from S3 filenames for displaying to users.
+*   **`qa_pairs/`**: This directory contains code and sample inputs and outputs for generating q&a pairs from slack conversation history stored as markdown and stores them locally as json
+    *   **`qa_pairs/slack_qa_generator.py`**: A script for converting slack conversation histories stored in markdown to json using LLMs
+    *   **`qa_pairs/slack_conversations.md`**: Contains the slack history in markdown format
+    *   **`qa_pairs/slack_qa_pairs_{}_{}.json`**: Stores the output of `qa_pairs/slack_qa_generator.py` in a json file.
 *   **`chatbot.py`**: The core Streamlit application that implements the Retrieval-Augmented Generation (RAG) chatbot functionality.
 *   **`slack_bot.py`**: The core slack_bot code that implements the Retrieval-Augmented Generation (RAG) chatbot functionality in slack using the slack bolt library.
 *   **`slack_scraper.py`**: A script to scrape conversations from Slack channels and store them as markdown files in S3.
-*   **`chatbot_helper.py`**: This file contains modular functions and helper utilities used across the chatbot application, promoting code reusability and organization.
 *   **`automated_test.py`**: Contains automated tests for the chatbot, ensuring its functionality and reliability.
 *   **`test_results/`**: This directory stores the results of automated tests, such as comparison outcomes for different models.
     *   **`test_results/claude_comparison_results.json`**: Stores the raw JSON results from comparisons, with Claude 3.7 sonnet.

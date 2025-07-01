@@ -4,15 +4,15 @@ import os
 import streamlit as st
 from dotenv import load_dotenv
 
-from chatbot_helper import (
+from utils.chatbot_helper import (
     initialize_bedrock_client,
     initialize_knowledge_base_retriever,
     initialize_llm,
-    main_system_prompt,
-    question_system_prompt,
     retrieve_context,
 )
-from feedback import display_feedback_form, display_feedback_form_for_sources
+from utils.feedback import display_feedback_form, display_feedback_form_for_sources
+
+from utils.prompts import main_system_prompt, question_system_prompt
 
 # load the environment variables
 load_dotenv()
