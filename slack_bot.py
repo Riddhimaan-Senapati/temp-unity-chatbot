@@ -15,7 +15,10 @@ from utils.chatbot_helper import (
     retrieve_context,
 )
 
-from utils.prompts import question_system_prompt, slack_system_prompt_with_followups as slack_system_prompt
+from utils.prompts import (
+    question_system_prompt,
+    slack_system_prompt_with_followups as slack_system_prompt,
+)
 
 # Load Environment Variables
 load_dotenv()
@@ -111,13 +114,19 @@ def reconstruct_history_from_slack(client, channel_id, thread_ts):
                             url_private = file.get("url_private")
                             if url_private:
                                 try:
+                                    # Add a timeout to the request (e.g., 10 seconds)
+                                    timeout_seconds = 10
                                     response = requests.get(
                                         url_private,
                                         headers={
                                             "Authorization": f"Bearer {os.environ.get('SLACK_BOT_TOKEN')}"
                                         },
+                                        timeout=timeout_seconds,
                                     )
-                                    response.raise_for_status()
+                                    logger.info(
+                                        f"Image download status: {response.status_code}, size: {len(response.content)} bytes."
+                                    )
+                                    response.raise_for_status()  # This will raise an error for 4xx/5xx responses
                                     base64_image = base64.b64encode(
                                         response.content
                                     ).decode("utf-8")
@@ -273,13 +282,19 @@ def process_user_message_with_slack_history(
                     url_private = file.get("url_private")
                     if url_private:
                         try:
+                            # Add a timeout to the request (e.g., 10 seconds)
+                            timeout_seconds = 10
                             response = requests.get(
                                 url_private,
                                 headers={
                                     "Authorization": f"Bearer {os.environ.get('SLACK_BOT_TOKEN')}"
                                 },
+                                timeout=timeout_seconds,
                             )
-                            response.raise_for_status()
+                            logger.info(
+                                f"Image download status: {response.status_code}, size: {len(response.content)} bytes."
+                            )
+                            response.raise_for_status()  # This will raise an error for 4xx/5xx responses
                             base64_image = base64.b64encode(response.content).decode(
                                 "utf-8"
                             )
