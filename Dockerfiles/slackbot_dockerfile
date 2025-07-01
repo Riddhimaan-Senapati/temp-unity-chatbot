@@ -18,7 +18,7 @@ RUN apk add --no-cache --virtual .build-deps \
     jpeg-dev \
     zlib-dev \
     && pip install uv \
-    && uv pip install --no-cache-dir -r requirements.txt \
+    && uv pip install --system --no-cache-dir -r requirements.txt \
     && apk del .build-deps
 
 # Copy the application files into the container
