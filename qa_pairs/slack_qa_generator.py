@@ -4,6 +4,8 @@ import json
 import sys
 from datetime import datetime
 from dotenv import load_dotenv
+import boto3
+from botocore.exceptions import ClientError
 
 # Add parent directory to path to import chatbot_helper
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -89,55 +91,91 @@ def generate_qa_pairs(llm, conversation_text):
         return []
 
 
-def save_qa_pairs_locally(
-    qa_pairs, filename="slack_qa_pairs.json", output_dir="qa_pairs"
+def save_qa_pairs_to_s3(
+    qa_pairs, filename="slack_qa_pairs.json", output_dir="slack_conversations"
 ):
-    """Save Q&A pairs to local JSON file in specified directory"""
+    """Save Q&A pairs to S3 in slack_conversations folder"""
     try:
-        # Ensure output directory exists
-        os.makedirs(output_dir, exist_ok=True)
+        S3_BUCKET_NAME = os.getenv("S3_BUCKET_NAME")
 
-        # Create full file path
-        file_path = os.path.join(output_dir, filename)
+        if not S3_BUCKET_NAME:
+            logger.error("S3_BUCKET_NAME not found in environment variables")
+            return False
 
-        with open(file_path, "w", encoding="utf-8") as f:
-            json.dump(qa_pairs, f, indent=2, ensure_ascii=False)
-        logger.info(f"Saved {len(qa_pairs)} Q&A pairs to {file_path}")
+        # Create S3 client
+        s3 = boto3.client("s3")
+
+        # Create S3 key
+        s3_key = f"{output_dir}/{filename}"
+
+        # Create the data structure
+        data = {
+            "generated_at": datetime.now().isoformat(),
+            "total_pairs": len(qa_pairs),
+            "source": "slack_conversations",
+            "qa_pairs": qa_pairs,
+        }
+
+        # Convert to JSON
+        content = json.dumps(data, indent=2, ensure_ascii=False)
+
+        # Upload to S3
+        s3.put_object(
+            Bucket=S3_BUCKET_NAME,
+            Key=s3_key,
+            Body=content,
+            ContentType="application/json",
+            Metadata={
+                "generated_at": datetime.now().isoformat(),
+                "total_pairs": str(len(qa_pairs)),
+                "source": "slack_conversations",
+            },
+        )
+
+        logger.info(
+            f"Saved {len(qa_pairs)} Q&A pairs to S3: s3://{S3_BUCKET_NAME}/{s3_key}"
+        )
         return True
+
     except Exception as e:
-        logger.error(f"Error saving Q&A pairs locally: {e}")
+        logger.error(f"Error saving Q&A pairs to S3: {e}")
         return False
 
 
-def get_markdown_from_local(local_file_path, search_dir="qa_pairs"):
-    """Get markdown content from local file, searching in specified directory"""
+def get_markdown_from_s3(s3_key="slack_conversations/slack_conversations.md"):
+    """Get markdown content from S3"""
     try:
-        # First try the file path as given
-        if os.path.exists(local_file_path):
-            file_path = local_file_path
-        else:
-            # Try in the search directory
-            file_path = os.path.join(search_dir, local_file_path)
-            if not os.path.exists(file_path):
-                logger.error(f"Local file not found: {local_file_path} or {file_path}")
-                return None
+        S3_BUCKET_NAME = os.getenv("S3_BUCKET_NAME")
 
-        with open(file_path, "r", encoding="utf-8") as file:
-            content = file.read()
+        if not S3_BUCKET_NAME:
+            logger.error("S3_BUCKET_NAME not found in environment variables")
+            return None
 
-        logger.info(f"Successfully read markdown from local file: {file_path}")
+        # Create S3 client
+        s3 = boto3.client("s3")
+
+        # Get object from S3
+        response = s3.get_object(Bucket=S3_BUCKET_NAME, Key=s3_key)
+        content = response["Body"].read().decode("utf-8")
+
+        logger.info(
+            f"Successfully read markdown from S3: s3://{S3_BUCKET_NAME}/{s3_key}"
+        )
         return content
 
+    except ClientError as e:
+        if e.response["Error"]["Code"] == "NoSuchKey":
+            logger.error(f"File not found in S3: {s3_key}")
+        else:
+            logger.error(f"S3 error reading markdown from S3: {e}")
+        return None
     except Exception as e:
-        logger.error(f"Error reading local markdown file: {e}")
+        logger.error(f"Error reading markdown from S3: {e}")
         return None
 
 
 def main():
-    # Configuration
-    qa_pairs_dir = "qa_pairs"  # Directory to search for markdown files and save output
-    local_markdown_file = "slack_conversations.md"  # Local file to process
-
+    """Main function that reads Slack conversations from S3"""
     # Initialize Bedrock LLM
     logger.info("Initializing Bedrock client and LLM...")
     bedrock_client = initialize_bedrock_client()
@@ -145,22 +183,22 @@ def main():
         client=bedrock_client, model_id="us.anthropic.claude-sonnet-4-20250514-v1:0"
     )
 
-    # Get markdown content from local file (search in qa_pairs directory)
-    logger.info(f"Reading Slack conversations from: {local_markdown_file}")
-    markdown_content = get_markdown_from_local(
-        local_markdown_file, search_dir=qa_pairs_dir
+    # Get markdown content from S3
+    logger.info("Reading Slack conversations from S3...")
+    markdown_content = get_markdown_from_s3(
+        "slack_conversations/slack_conversations.md"
     )
 
     if not markdown_content:
-        logger.error(f"Failed to retrieve markdown content from {local_markdown_file}")
-        return
+        logger.error("Failed to retrieve markdown content from S3")
+        return False
 
     # Parse conversations from markdown
     conversations = parse_conversations_from_markdown(markdown_content)
 
     if not conversations:
         logger.warning("No conversations found in markdown content")
-        return
+        return False
 
     # Generate Q&A pairs for each conversation
     logger.info(f"Processing {len(conversations)} conversations...")
@@ -176,19 +214,23 @@ def main():
         else:
             logger.info(f"No Q&A pairs generated from conversation {i}")
 
-    # Save Q&A pairs locally in qa_pairs directory
+    # Save Q&A pairs to S3 in slack_conversations directory
     if all_qa_pairs:
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
         filename = f"slack_qa_pairs_{timestamp}.json"
 
-        if save_qa_pairs_locally(all_qa_pairs, filename, output_dir=qa_pairs_dir):
+        if save_qa_pairs_to_s3(
+            all_qa_pairs, filename, output_dir="slack_conversations"
+        ):
             logger.info(f"Successfully generated {len(all_qa_pairs)} total Q&A pairs")
 
             # Print summary
             print("\n=== Q&A Generation Summary ===")
             print(f"Conversations processed: {len(conversations)}")
             print(f"Q&A pairs generated: {len(all_qa_pairs)}")
-            print(f"Output file: {os.path.join(qa_pairs_dir, filename)}")
+            print(
+                f"Output file: s3://{os.getenv('S3_BUCKET_NAME')}/slack_conversations/{filename}"
+            )
 
             # Show first few examples
             print("\n=== Sample Q&A Pairs ===")
@@ -199,10 +241,14 @@ def main():
                     print(f"A{i}: {answers[0][:100]}...")
                 else:
                     print(f"A{i}: No answers found")
+
+            return True
         else:
-            logger.error("Failed to save Q&A pairs locally")
+            logger.error("Failed to save Q&A pairs to S3")
+            return False
     else:
         logger.warning("No Q&A pairs were generated from any conversations")
+        return False
 
 
 if __name__ == "__main__":

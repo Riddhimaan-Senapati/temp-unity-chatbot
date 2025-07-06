@@ -23,7 +23,7 @@ This is the code repository for the RAG chatbot based on the Unity HPC documenta
 ├── utils/
 │ ├── chatbot_helper.py
 │ ├── feedback.py
-| |── prompts.py
+│ ├── prompts.py
 │ └── data_pipeline/
 │     ├── scrape_and_upload_to_s3.py
 │     ├── scrapping_helper.py
@@ -31,14 +31,11 @@ This is the code repository for the RAG chatbot based on the Unity HPC documenta
 ├── qa_pairs/
 │ ├── slack_qa_generator.py
 │ ├── slack_conversations.md
-| |── slack_qa_pairs_{}_{}.json
+│ └── slack_qa_pairs_{}_{}.json
 ├── chatbot.py
 ├── slack_bot.py
 ├── slack_scraper.py
 ├── automated_test.py
-├── test_results/
-│ ├── claude_comparison_results.json
-│ └── claude_comparison_results.md
 ├── documents/
 │ └── (Contains scraped Unity HPC documentation in Markdown files)
 ├── .github/
@@ -80,14 +77,11 @@ This is the code repository for the RAG chatbot based on the Unity HPC documenta
 *   **`slack_bot.py`**: The core slack_bot code that implements the Retrieval-Augmented Generation (RAG) chatbot functionality in slack using the slack bolt library.
 *   **`slack_scraper.py`**: A script to scrape conversations from Slack channels and store them as markdown files in S3.
 *   **`automated_test.py`**: Contains automated tests for the chatbot, ensuring its functionality and reliability.
-*   **`test_results/`**: This directory stores the results of automated tests, such as comparison outcomes for different models.
-    *   **`test_results/claude_comparison_results.json`**: Stores the raw JSON results from comparisons, with Claude 3.7 sonnet.
-    *   **`test_results/claude_comparison_results.md`**: A human-readable Markdown report summarizing the comparison results, with Claude 3.7 sonnet.
 *   **`documents/`**: This directory stores the scraped documentation in Markdown format, which serves as the knowledge base for the RAG chatbot.
 *   **`.dockerignore`**: Specifies files and directories that should be ignored by Docker when building images, similar to `.gitignore`.
 *   **`cloudformation-templates/`**: Directory containing AWS CloudFormation templates for infrastructure deployment.
-    *   **`cloudformation-templates/cloudformation-template-chatbot.yml`**: AWS CloudFormation template that defines the infrastructure for the Streamlit chatbot, including VPC, ECS cluster, load balancer, and other AWS resources.
-    *   **`cloudformation-templates/cloudformation-template-slackbot.yml`**: AWS CloudFormation template that defines the infrastructure for the Slack bot, including VPC, ECS cluster, and other AWS resources.
+    *   **`cloudformation-template-chatbot.yml`**: AWS CloudFormation template that defines the infrastructure for the Streamlit chatbot, including VPC, ECS cluster, load balancer, and other AWS resources.
+    *   **`cloudformation-template-slackbot.yml`**: AWS CloudFormation template that defines the infrastructure for the Slack bot, including VPC, ECS cluster, and other AWS resources.
 *   **`Dockerfiles/`**: Directory containing Docker configuration files.
     *   **`Dockerfiles/chatbot_dockerfile`**: Defines the steps to build the Docker image for the Streamlit chatbot application, specifying the base image, dependencies, and application setup.
     *   **`Dockerfiles/slackbot_dockerfile`**: Defines the steps to build the Docker image for the Slack bot application.

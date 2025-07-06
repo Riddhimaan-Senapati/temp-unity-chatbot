@@ -25,7 +25,7 @@ def initialize_bedrock_client():
     )
 
 
-def initialize_llm(client, model_id="us.anthropic.claude-3-7-sonnet-20250219-v1:0"):
+def initialize_llm(client, model_id="us.anthropic.claude-sonnet-4-20250514-v1:0"):
     """initialize ChatBedrockConverse LLM"""
     return ChatBedrockConverse(client=client, model_id=model_id)
 
@@ -34,7 +34,7 @@ def initialize_knowledge_base_retriever():
     """Initialize and return the Knowledge Base retriever"""
     return AmazonKnowledgeBasesRetriever(
         knowledge_base_id=os.getenv("KNOWLEDGE_BASE_ID"),
-        retrieval_config={"vectorSearchConfiguration": {"numberOfResults": 5}},
+        retrieval_config={"vectorSearchConfiguration": {"numberOfResults": 10}},
     )
 
 

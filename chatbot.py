@@ -109,7 +109,19 @@ for i, message in enumerate(st.session_state.messages):
     if message["role"] == "system":
         continue
     with st.chat_message(message["role"]):
-        st.markdown(message["content"])
+        # Display text content
+        if isinstance(message["content"], str):
+            st.markdown(message["content"])
+        elif isinstance(message["content"], list):
+            # Handle multimodal content
+            for part in message["content"]:
+                if part["type"] == "text":
+                    st.markdown(part["text"])
+
+        # Display images if they exist
+        if message.get("images"):
+            for img_file in message["images"]:
+                st.image(img_file, caption=img_file.name, width=300)
 
         # Display sources if they exist in the message
         if (
@@ -142,12 +154,68 @@ for i, message in enumerate(st.session_state.messages):
             unique_key = f"history_{i}_{hash(message['content']) % 10000}"
             display_feedback_form(user_message, message["content"], unique_key)
 
+# Image upload widget
+uploaded_files = st.file_uploader(
+    "Upload images (optional)",
+    type=["png", "jpg", "jpeg", "gif", "webp"],
+    accept_multiple_files=True,
+    key="image_uploader",
+)
+
 if prompt := st.chat_input("What is up?"):
     # Log the user's raw input
-    logger.info(f"User input received: '{prompt}'")
-    st.session_state.messages.append({"role": "user", "content": prompt})
+    logger.info(
+        f"User input received: '{prompt}', Images: {len(uploaded_files) if uploaded_files else 0}"
+    )
+
+    # Create multimodal message content
+    message_content_parts = []
+
+    # Add text content
+    if prompt:
+        message_content_parts.append({"type": "text", "text": prompt})
+
+    # Add image content
+    if uploaded_files:
+        for uploaded_file in uploaded_files:
+            import base64
+
+            # Read and encode image
+            image_bytes = uploaded_file.read()
+            base64_image = base64.b64encode(image_bytes).decode("utf-8")
+
+            # Determine MIME type
+            mime_type = f"image/{uploaded_file.type.split('/')[-1]}"
+
+            message_content_parts.append(
+                {
+                    "type": "image",
+                    "source": {
+                        "type": "base64",
+                        "media_type": mime_type,
+                        "data": base64_image,
+                    },
+                }
+            )
+            logger.info(f"Added image to message: {uploaded_file.name}")
+
+    # Store message with multimodal content
+    st.session_state.messages.append(
+        {
+            "role": "user",
+            "content": message_content_parts
+            if len(message_content_parts) > 1
+            else prompt,
+            "images": uploaded_files if uploaded_files else None,
+        }
+    )
+
     with st.chat_message("user"):
         st.markdown(prompt)
+        # Display uploaded images
+        if uploaded_files:
+            for uploaded_file in uploaded_files:
+                st.image(uploaded_file, caption=uploaded_file.name, width=300)
 
     with st.chat_message("assistant"):
         # First phase: Searching documentation
@@ -206,24 +274,66 @@ if prompt := st.chat_input("What is up?"):
             else:
                 logger.info("No relevant documents found by retriever.")
 
-            # Augment user prompt with retrieved context
-            augmented_user_prompt = f"Context:\n{context}\n\nQuestion: {prompt}"
-            # Log the augmented prompt (can be verbose)
-            logger.debug(
-                f"Augmented user prompt for main LLM: '{augmented_user_prompt}'"
-            )
+            # Create multimodal message for LLM
+            current_turn_content_parts = []
+
+            # Add augmented text with context
+            if prompt:
+                augmented_text = f"Context:\n{context}\n\nQuestion: {prompt}"
+                current_turn_content_parts.append(
+                    {"type": "text", "text": augmented_text}
+                )
+            else:
+                # If no text but has images
+                augmented_text = f"Context:\n{context}\n\nUser question regarding the following image(s): Describe the image(s) and relate them to the provided context if possible."
+                current_turn_content_parts.append(
+                    {"type": "text", "text": augmented_text}
+                )
+
+            # Add images to current turn
+            if uploaded_files:
+                import base64
+
+                for uploaded_file in uploaded_files:
+                    # Reset file pointer
+                    uploaded_file.seek(0)
+                    image_bytes = uploaded_file.read()
+                    base64_image = base64.b64encode(image_bytes).decode("utf-8")
+                    mime_type = f"image/{uploaded_file.type.split('/')[-1]}"
+
+                    current_turn_content_parts.append(
+                        {
+                            "type": "image",
+                            "source": {
+                                "type": "base64",
+                                "media_type": mime_type,
+                                "data": base64_image,
+                            },
+                        }
+                    )
 
             messages_for_main_llm = [{"role": "system", "content": main_system_prompt}]
-            # Add historical messages (all user/assistant turns before the current prompt)
-            for m in st.session_state.messages[
-                1:-1
-            ]:  # from after system, up to before current user prompt
-                messages_for_main_llm.append(
-                    {"role": m["role"], "content": m["content"]}
-                )
-            # Add the current user's turn, now augmented
+
+            # Add historical messages
+            for m in st.session_state.messages[1:-1]:
+                if isinstance(m["content"], str):
+                    messages_for_main_llm.append(
+                        {"role": m["role"], "content": m["content"]}
+                    )
+                else:
+                    # Handle multimodal historical messages
+                    messages_for_main_llm.append(
+                        {"role": m["role"], "content": m["content"]}
+                    )
+
+            # Add current multimodal turn
             messages_for_main_llm.append(
-                {"role": "user", "content": augmented_user_prompt}
+                {
+                    "role": "user",
+                    "content": current_turn_content_parts
+                    if len(current_turn_content_parts) > 1
+                    else current_turn_content_parts[0]["text"],
+                }
             )
             # Log messages being sent to the main LLM (can be verbose)
             logger.info(f"Sending {len(messages_for_main_llm)} messages to main LLM.")
