@@ -17,21 +17,15 @@ load_dotenv()
 # Define available bedrock models
 MODELS = {
     "claude-4-sonnet": "us.anthropic.claude-sonnet-4-20250514-v1:0",
-    "deepseek-r1": "us.deepseek.r1-v1:0",
-    "nova-pro": "us.amazon.nova-pro-v1:0",
-    "nova-lite": "us.amazon.nova-lite-v1:0",
-    "nova-premier": "us.amazon.nova-premier-v1:0",
-    "llama-4-scout": "us.meta.llama4-scout-17b-instruct-v1:0",
+    "claude-3.5-haiku": "us.anthropic.claude-3-5-haiku-20241022-v1:0",
+    "llama-4-maverick": "us.meta.llama4-maverick-17b-instruct-v1:0",
 }
 
 # Define pricing for each model (in $ per 1k tokens)
 MODEL_PRICING = {
     "claude-4-sonnet": {"input": 0.003, "output": 0.015},
-    "deepseek-r1": {"input": 0.00135, "output": 0.0054},
-    "nova-pro": {"input": 0.0008, "output": 0.0032},
-    "nova-lite": {"input": 0.00006, "output": 0.00024},
-    "nova-premier": {"input": 0.0025, "output": 0.0125},
-    "llama-4-scout": {"input": 0.00017, "output": 0.00066},
+    "claude-3.5-haiku": {"input": 0.0008, "output": 0.004},
+    "llama-4-maverick": {"input": 0.00024, "output": 0.00097},
 }
 
 
@@ -1081,10 +1075,10 @@ def system_prompt_comparison_json_to_markdown(json_file):
 ### Use test_model_with_without_system_prompt(model_name, thread_name) to test one model with/without system prompt
 if __name__ == "__main__":
     # Example: Test a single model on all conversation threads
-    test_model_on_database("claude-4-sonnet")
+    # test_model_on_database("claude-3.5-haiku")
 
     # Example: Test all models on a single thread
-    # compare_models("Unity basics")
+    compare_models("Tricky GPU error driver update problem")
 
     # Example: Test a specific model with and without system prompt on a chosen thread
     # test_model_with_without_system_prompt("claude-4-sonnet", "Unity basics")

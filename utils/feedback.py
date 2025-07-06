@@ -3,9 +3,17 @@ import boto3
 import streamlit as st
 from datetime import datetime
 import pandas as pd
+import os
+from dotenv import load_dotenv
+
+# Load environment variables
+load_dotenv()
+
+# Configuration
+S3_BUCKET_NAME = os.getenv("S3_BUCKET_NAME")
 
 
-# Load feedback details in S3 Bucket
+# Load feedback details from S3 Bucket
 def save_feedback(feedback_data):
     # Add timestamp and ID to feedback
     feedback_data["timestamp"] = datetime.now().isoformat()
@@ -17,7 +25,7 @@ def save_feedback(feedback_data):
         # Get existing feedback list from S3 or create new one
         try:
             response = s3_client.get_object(
-                Bucket="unity-chatbot-feedback", Key="feedback/all_feedback.json"
+                Bucket=S3_BUCKET_NAME, Key="feedback/all_feedback.json"
             )
             feedback_list = json.loads(response["Body"].read().decode("utf-8"))
         except Exception as e:
@@ -30,10 +38,14 @@ def save_feedback(feedback_data):
         # Update the consolidated feedback file in S3
         consolidated_json = json.dumps(feedback_list, indent=2, ensure_ascii=False)
         s3_client.put_object(
-            Bucket="unity-chatbot-feedback",
+            Bucket=S3_BUCKET_NAME,
             Key="feedback/all_feedback.json",
             Body=consolidated_json,
             ContentType="application/json",
+            Metadata={
+                "total_feedback": str(len(feedback_list)),
+                "last_updated": datetime.now().isoformat(),
+            },
         )
     except Exception as e:
         print(f"Error saving to S3: {e}")
@@ -144,12 +156,13 @@ def display_feedback_form_for_sources(question, response, doc, unique_key):
 
 
 # Load feedback data from S3 as DataFrame
+@st.cache_data(ttl=300)  # Cache for 5 minutes
 def load_feedback_data():
     try:
         # Load from S3
         s3_client = boto3.client("s3")
         response = s3_client.get_object(
-            Bucket="unity-chatbot-feedback", Key="feedback/all_feedback.json"
+            Bucket=S3_BUCKET_NAME, Key="feedback/all_feedback.json"
         )
         feedback_list = json.loads(response["Body"].read().decode("utf-8"))
 
@@ -159,7 +172,7 @@ def load_feedback_data():
             df["timestamp"] = pd.to_datetime(df["timestamp"])
             return df
     except Exception as e:
-        print(f"Error loading from S3: {e}")
+        print(f"Error loading feedback from S3: {e}")
 
     return pd.DataFrame()
 
