@@ -1,10 +1,21 @@
+import os
+from dotenv import load_dotenv
+
+# Load environment variables
+load_dotenv()
+
+# Configuration
+S3_BUCKET_NAME = os.getenv("S3_BUCKET_NAME")
+S3_FOLDER_PREFIX = os.getenv("S3_FOLDER_PREFIX")
+
+
 def clean_s3_link(s3_link):
     """
     Cleans an S3-style link to a web-accessible URL.
     Example input: "s3://umass-unity-chatbot/documents/docs.unity.rc.umass.edu!documentation!cluster_specs_.md"
     Example output: "https://docs.unity.rc.umass.edu/documentation/cluster_specs"
     """
-    s3_prefix = "s3://umass-unity-chatbot/documents/"
+    s3_prefix = f"s3://{S3_BUCKET_NAME}/{S3_FOLDER_PREFIX}"
     web_protocol = "https://"
     file_extension = ".md"
 
@@ -29,19 +40,3 @@ def clean_s3_link(s3_link):
 
     # 4. Prepend the web protocol
     return f"{web_protocol}{cleaned_path}"
-
-
-"""
-# Test cases based on real file names in our S3 bucket:
-links_to_test = [
-    "s3://umass-unity-chatbot/documents/docs.unity.rc.umass.edu_.md",
-    "s3://umass-unity-chatbot/documents/docs.unity.rc.umass.edu_documentation_.md",
-    "s3://umass-unity-chatbot/documents/docs.unity.rc.umass.edu_documentation_cluster_specs_.md",
-    "s3://umass-unity-chatbot/documents/docs.unity.rc.umass.edu_about_.md",
-]
-
-print("Original -> Cleaned")
-for link in links_to_test:
-    print(f"{link} -> {clean_s3_link(link)}")
-
-"""

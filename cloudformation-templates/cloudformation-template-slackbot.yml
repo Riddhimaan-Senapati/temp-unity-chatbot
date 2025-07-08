@@ -49,7 +49,6 @@ Parameters:
     
   S3BucketName:
     Type: String
-    Default: "umass-unity-chatbot"
     Description: Name of the S3 bucket for documents
     
   LogRetentionDays:
@@ -64,7 +63,6 @@ Parameters:
     
   KnowledgeBaseId:
     Type: String
-    Default: "0G0DQEDJAO"
     Description: ID of the AWS Bedrock Knowledge Base
     
   S3FolderPrefix:
@@ -74,12 +72,10 @@ Parameters:
     
   UnityUsername:
     Type: String
-    Default: "unity_team"
     Description: Username for Unity authentication
     
   UnityPassword:
     Type: String
-    Default: "123"
     Description: Password for Unity authentication
     NoEcho: true
     

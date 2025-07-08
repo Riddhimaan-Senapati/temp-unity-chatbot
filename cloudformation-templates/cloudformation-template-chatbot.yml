@@ -62,7 +62,6 @@ Parameters:
     
   S3BucketName:
     Type: String
-    Default: "umass-unity-chatbot"
     Description: Name of the S3 bucket for documents
     
   LogRetentionDays:
@@ -77,36 +76,22 @@ Parameters:
     
   KnowledgeBaseId:
     Type: String
-    Default: "0G0DQEDJAO"
     Description: ID of the AWS Bedrock Knowledge Base
     
   S3FolderPrefix:
     Type: String
-    Default: "documents/"
     Description: Folder prefix in the S3 bucket
     
   UnityUsername:
     Type: String
-    Default: "unity_team"
     Description: Username for Unity authentication
     
   UnityPassword:
     Type: String
-    Default: "123"
     Description: Password for Unity authentication
     NoEcho: true
     
-  SlackBotToken:
-    Type: String
-    Default: ""
-    Description: Slack Bot Token
-    NoEcho: true
-    
-  SlackAppToken:
-    Type: String
-    Default: ""
-    Description: Slack App Token
-    NoEcho: true
+
 
 Resources:
   # VPC and Networking
@@ -269,10 +254,7 @@ Resources:
               Value: !Ref UnityUsername
             - Name: UNITY_PASSWORD
               Value: !Ref UnityPassword
-            - Name: SLACK_BOT_TOKEN
-              Value: !Ref SlackBotToken
-            - Name: SLACK_APP_TOKEN
-              Value: !Ref SlackAppToken
+
 
   # ECS Service
   ECSService:
