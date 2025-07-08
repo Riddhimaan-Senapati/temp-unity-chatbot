@@ -11,6 +11,8 @@ from utils.data_pipeline.scrape_and_upload_to_s3 import (
     scrape_and_upload_link,
 )
 from utils.feedback import display_feedback_dashboard
+from slack_scripts.slack_scraper import main as slack_scraper_main
+from qa_pairs.slack_qa_generator import main as slack_qa_main
 
 load_dotenv()
 
@@ -300,8 +302,6 @@ with tab3:
             f"Scraping Slack channel conversations from {start_date or 'beginning'}..."
         )
         with st.spinner("Scraping conversations from Slack..."):
-            from slack_scraper import main as slack_scraper_main
-
             slack_scraper_main(start_date)
         st.success("Slack scraping complete! Refreshing dashboard...")
         st.cache_data.clear()
@@ -587,7 +587,6 @@ with tab4:
                 import sys
 
                 sys.path.append(os.path.join(os.getcwd(), "qa_pairs"))
-                from qa_pairs.slack_qa_generator import main as slack_qa_main
 
                 # Run Q&A generator with S3 input (this will save directly to S3)
                 success = slack_qa_main()
@@ -658,7 +657,7 @@ with tab4:
             total_pairs = len(st.session_state.qa_pairs)
             current_index = st.session_state.current_qa_index
 
-            col1, col2, col3 = st.columns([2, 1, 1])
+            col1, col2, col3, col4 = st.columns([2, 1, 1, 1])
             with col1:
                 st.progress((current_index + 1) / total_pairs)
                 st.caption(f"Reviewing pair {current_index + 1} of {total_pairs}")
@@ -672,6 +671,20 @@ with tab4:
                     st.session_state.current_qa_index = min(
                         total_pairs - 1, current_index + 1
                     )
+                    st.rerun()
+            with col4:
+                # Jump to specific index
+                jump_to_index = st.number_input(
+                    "Jump to:",
+                    min_value=1,
+                    max_value=total_pairs,
+                    value=current_index + 1,
+                    step=1,
+                    key=f"jump_to_{current_index}",
+                    help="Enter a pair number to jump directly to it",
+                )
+                if st.button("🎯 Go", key=f"jump_button_{current_index}"):
+                    st.session_state.current_qa_index = jump_to_index - 1
                     st.rerun()
 
             st.markdown("---")

@@ -27,7 +27,7 @@ jobs:
       # Chatbot ECR Repository
       - name: Ensure Chatbot ECR repository exists
         env:
-          ECR_REPOSITORY: ${{ secrets.ECR_REPOSITORY || 'unity-chatbot' }}
+          ECR_REPOSITORY: unity-chatbot
         run: |
           if ! aws ecr describe-repositories --repository-names $ECR_REPOSITORY 2>/dev/null; then
             echo "Creating ECR repository $ECR_REPOSITORY"
@@ -43,7 +43,7 @@ jobs:
       - name: Build, tag, and push Chatbot image to Amazon ECR
         env:
           ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
-          ECR_REPOSITORY: ${{ secrets.ECR_REPOSITORY || 'unity-chatbot' }}
+          ECR_REPOSITORY: ${{ 'unity-chatbot' }}
           IMAGE_TAG: ${{ github.sha }}
         run: |
           docker build -t $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG -f Dockerfiles/chatbot_dockerfile .
@@ -73,16 +73,14 @@ jobs:
               ParameterKey=DomainName,ParameterValue=${{ secrets.DOMAIN_NAME }} \
               ParameterKey=CertificateArn,ParameterValue=${{ secrets.CERTIFICATE_ARN }} \
               ParameterKey=EnvironmentName,ParameterValue=prod \
-              ParameterKey=ECRRepositoryName,ParameterValue=${{ secrets.ECR_REPOSITORY || 'unity-chatbot' }} \
+              ParameterKey=ECRRepositoryName,ParameterValue=${{ 'unity-chatbot' }} \
               ParameterKey=ECSClusterName,ParameterValue=unity-chatbot-cluster \
               ParameterKey=ECSServiceName,ParameterValue=unity-chatbot-service \
-              ParameterKey=KnowledgeBaseId,ParameterValue=${{ secrets.KNOWLEDGE_BASE_ID || '0G0DQEDJAO' }} \
-              ParameterKey=S3BucketName,ParameterValue=${{ secrets.S3_BUCKET_NAME || 'umass-unity-chatbot' }} \
-              ParameterKey=S3FolderPrefix,ParameterValue=${{ secrets.S3_FOLDER_PREFIX || 'documents/' }} \
-              ParameterKey=UnityUsername,ParameterValue=${{ secrets.UNITY_USERNAME || 'unity_team' }} \
-              ParameterKey=UnityPassword,ParameterValue=${{ secrets.UNITY_PASSWORD || '123' }} \
-              ParameterKey=SlackBotToken,ParameterValue=${{ secrets.SLACK_BOT_TOKEN || '' }} \
-              ParameterKey=SlackAppToken,ParameterValue=${{ secrets.SLACK_APP_TOKEN || '' }} \
+              ParameterKey=KnowledgeBaseId,ParameterValue=${{ secrets.KNOWLEDGE_BASE_ID }} \
+              ParameterKey=S3BucketName,ParameterValue=${{ secrets.S3_BUCKET_NAME }} \
+              ParameterKey=S3FolderPrefix,ParameterValue=${{ secrets.S3_FOLDER_PREFIX }} \
+              ParameterKey=UnityUsername,ParameterValue=${{ secrets.UNITY_USERNAME }} \
+              ParameterKey=UnityPassword,ParameterValue=${{ secrets.UNITY_PASSWORD }} \
               ParameterKey=DesiredCount,ParameterValue=1 \
             --capabilities CAPABILITY_IAM CAPABILITY_NAMED_IAM
           
@@ -101,16 +99,14 @@ jobs:
               ParameterKey=DomainName,ParameterValue=${{ secrets.DOMAIN_NAME }} \
               ParameterKey=CertificateArn,ParameterValue=${{ secrets.CERTIFICATE_ARN }} \
               ParameterKey=EnvironmentName,ParameterValue=prod \
-              ParameterKey=ECRRepositoryName,ParameterValue=${{ secrets.ECR_REPOSITORY || 'unity-chatbot' }} \
+              ParameterKey=ECRRepositoryName,ParameterValue=unity-chatbot \
               ParameterKey=ECSClusterName,ParameterValue=unity-chatbot-cluster \
               ParameterKey=ECSServiceName,ParameterValue=unity-chatbot-service \
-              ParameterKey=KnowledgeBaseId,ParameterValue=${{ secrets.KNOWLEDGE_BASE_ID || '0G0DQEDJAO' }} \
-              ParameterKey=S3BucketName,ParameterValue=${{ secrets.S3_BUCKET_NAME || 'umass-unity-chatbot' }} \
-              ParameterKey=S3FolderPrefix,ParameterValue=${{ secrets.S3_FOLDER_PREFIX || 'documents/' }} \
-              ParameterKey=UnityUsername,ParameterValue=${{ secrets.UNITY_USERNAME || 'unity_team' }} \
-              ParameterKey=UnityPassword,ParameterValue=${{ secrets.UNITY_PASSWORD || '123' }} \
-              ParameterKey=SlackBotToken,ParameterValue=${{ secrets.SLACK_BOT_TOKEN || '' }} \
-              ParameterKey=SlackAppToken,ParameterValue=${{ secrets.SLACK_APP_TOKEN || '' }} \
+              ParameterKey=KnowledgeBaseId,ParameterValue=${{ secrets.KNOWLEDGE_BASE_ID }} \
+              ParameterKey=S3BucketName,ParameterValue=${{ secrets.S3_BUCKET_NAME }} \
+              ParameterKey=S3FolderPrefix,ParameterValue=${{ secrets.S3_FOLDER_PREFIX }} \
+              ParameterKey=UnityUsername,ParameterValue=${{ secrets.UNITY_USERNAME }} \
+              ParameterKey=UnityPassword,ParameterValue=${{ secrets.UNITY_PASSWORD }} \
               ParameterKey=DesiredCount,ParameterValue=1 \
             --capabilities CAPABILITY_IAM CAPABILITY_NAMED_IAM 2>&1) || echo "No updates to be performed"
           

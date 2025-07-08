@@ -30,7 +30,7 @@ MODEL_PRICING = {
 
 
 # Load conversation threads from JSON file
-def load_conversation_threads(file_path="conversation_threads.json"):
+def load_conversation_threads(file_path="test_data/conversation_threads.json"):
     with open(file_path, "r", encoding="utf-8") as f:
         data = json.load(f)
     return data["threads"]

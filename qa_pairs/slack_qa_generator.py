@@ -81,7 +81,28 @@ def generate_qa_pairs(llm, conversation_text):
         # Try to parse JSON response
         try:
             qa_pairs = json.loads(response_text)
-            return qa_pairs if isinstance(qa_pairs, list) else []
+            if isinstance(qa_pairs, list):
+                # Filter out Q&A pairs with no answers (empty array)
+                filtered_qa_pairs = []
+                for qa_pair in qa_pairs:
+                    if isinstance(qa_pair, dict):
+                        answers = qa_pair.get("answers", [])
+                        # Skip if answers is empty or not a list
+                        if (
+                            answers
+                            and isinstance(answers, list)
+                            and any(
+                                ans.strip() for ans in answers if isinstance(ans, str)
+                            )
+                        ):
+                            filtered_qa_pairs.append(qa_pair)
+                        else:
+                            logger.info(
+                                f"Skipping Q&A pair with no valid answers: {qa_pair.get('question', 'Unknown question')[:50]}..."
+                            )
+                return filtered_qa_pairs
+            else:
+                return []
         except json.JSONDecodeError:
             logger.warning(f"Failed to parse JSON response: {response_text[:100]}...")
             return []

@@ -1,5 +1,5 @@
 # Use an official Python runtime as a parent image
-FROM python:3.12-alpine
+FROM python:3.12-slim
 
 # Set the working directory in the container
 WORKDIR /app
@@ -7,21 +7,11 @@ WORKDIR /app
 # Copy the requirements file into the container
 COPY requirements.txt .
 
-# Install build dependencies and Python packages
-RUN apk add --no-cache --virtual .build-deps \
-    gcc \
-    musl-dev \
-    python3-dev \
-    linux-headers \
-    libffi-dev \
-    openssl-dev \
-    jpeg-dev \
-    zlib-dev \
-    && pip install --no-cache-dir -r requirements.txt \
-    && apk del .build-deps
+# Install Python packages
+RUN pip install --no-cache-dir -r requirements.txt
 
 # Copy the application files into the container
 COPY . .
 
 # Command to run the Slack bot
-CMD ["python", "slack_bot.py"]
+CMD ["python", "slack_scripts/slack_bot.py"]
