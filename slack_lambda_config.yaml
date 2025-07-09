@@ -25,8 +25,9 @@ tags:
   PROJECT: ai4cw
   Environment: prod
 
+# Ensure utils directory is included in Lambda package
+# This contains chatbot_helper.py and prompts.py
+
 build:
   source_directories: utils
   
-# Ensure utils directory is included in Lambda package
-# This contains chatbot_helper.py and prompts.py
