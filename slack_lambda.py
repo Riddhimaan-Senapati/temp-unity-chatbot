@@ -2,7 +2,6 @@ import logging
 import os
 import base64
 import requests
-
 from langchain_core.messages import AIMessage, HumanMessage, SystemMessage
 from slack_bolt import App
 from slack_bolt.adapter.aws_lambda import SlackRequestHandler
