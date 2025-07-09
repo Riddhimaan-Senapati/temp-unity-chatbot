@@ -1,0 +1,6 @@
+slack_sdk
+langchain-aws
+langchain-core
+boto3
+requests
+python-dotenv

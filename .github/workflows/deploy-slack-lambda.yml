@@ -1,0 +1,199 @@
+name: Deploy Unity Slack Lambda
+
+on:
+  push:
+    branches: [ main ]
+  workflow_dispatch:
+
+jobs:
+  deploy-lambda:
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+      
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v2
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ secrets.AWS_REGION }}
+      
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.9'
+      
+      - name: Get AWS Account ID
+        run: |
+          AWS_ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text)
+          echo "AWS_ACCOUNT_ID=$AWS_ACCOUNT_ID" >> $GITHUB_ENV
+          echo "Using AWS Account ID: $AWS_ACCOUNT_ID"
+      
+      - name: Create IAM role for Lambda
+        run: |
+          ROLE_NAME="unity-slack-lambda-role"
+          
+          # Check if role exists
+          if ! aws iam get-role --role-name $ROLE_NAME 2>/dev/null; then
+            echo "Creating IAM role..."
+            aws iam create-role \
+              --role-name $ROLE_NAME \
+              --assume-role-policy-document '{
+                "Version": "2012-10-17",
+                "Statement": [
+                  {
+                    "Effect": "Allow",
+                    "Principal": {"Service": "lambda.amazonaws.com"},
+                    "Action": "sts:AssumeRole"
+                  }
+                ]
+              }' \
+              --tags Key=PROJECT,Value=ai4cw
+            
+            # Attach policies
+            aws iam attach-role-policy --role-name $ROLE_NAME --policy-arn arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
+            aws iam attach-role-policy --role-name $ROLE_NAME --policy-arn arn:aws:iam::aws:policy/AmazonBedrockFullAccess
+            aws iam attach-role-policy --role-name $ROLE_NAME --policy-arn arn:aws:iam::aws:policy/AmazonS3ReadOnlyAccess
+            
+            echo "Waiting for role to be available..."
+            sleep 10
+          fi
+      
+      - name: Create Lambda deployment package
+        run: |
+          mkdir -p lambda-package
+          cp slack_lambda.py lambda-package/
+          cp -r utils lambda-package/
+          cd lambda-package
+          pip install -r ../slack_lambda_requirements.txt -t .
+          zip -r ../unity-slack-lambda.zip .
+      
+      - name: Deploy Lambda function
+        run: |
+          FUNCTION_NAME="unity-slack-lambda"
+          ROLE_ARN="arn:aws:iam::$AWS_ACCOUNT_ID:role/unity-slack-lambda-role"
+          
+          if aws lambda get-function --function-name $FUNCTION_NAME 2>/dev/null; then
+            echo "Updating existing Lambda function..."
+            aws lambda update-function-code \
+              --function-name $FUNCTION_NAME \
+              --zip-file fileb://unity-slack-lambda.zip
+            
+            aws lambda update-function-configuration \
+              --function-name $FUNCTION_NAME \
+              --timeout 300 \
+              --memory-size 1024 \
+              --environment Variables="{
+                SLACK_BOT_TOKEN=${{ secrets.SLACK_BOT_TOKEN }},
+                SLACK_SIGNING_SECRET=${{ secrets.SLACK_SIGNING_SECRET }},
+                AWS_REGION=${{ secrets.AWS_REGION }},
+                KNOWLEDGE_BASE_ID=${{ secrets.KNOWLEDGE_BASE_ID }},
+                S3_BUCKET_NAME=${{ secrets.S3_BUCKET_NAME }},
+                S3_FOLDER_PREFIX=${{ secrets.S3_FOLDER_PREFIX }},
+                UNITY_USERNAME=${{ secrets.UNITY_USERNAME }},
+                UNITY_PASSWORD=${{ secrets.UNITY_PASSWORD }}
+              }"
+          else
+            echo "Creating new Lambda function..."
+            aws lambda create-function \
+              --function-name $FUNCTION_NAME \
+              --runtime python3.9 \
+              --role $ROLE_ARN \
+              --handler slack_lambda.handler \
+              --zip-file fileb://unity-slack-lambda.zip \
+              --timeout 300 \
+              --memory-size 1024 \
+              --environment Variables="{
+                SLACK_BOT_TOKEN=${{ secrets.SLACK_BOT_TOKEN }},
+                SLACK_SIGNING_SECRET=${{ secrets.SLACK_SIGNING_SECRET }},
+                AWS_REGION=${{ secrets.AWS_REGION }},
+                KNOWLEDGE_BASE_ID=${{ secrets.KNOWLEDGE_BASE_ID }},
+                S3_BUCKET_NAME=${{ secrets.S3_BUCKET_NAME }},
+                S3_FOLDER_PREFIX=${{ secrets.S3_FOLDER_PREFIX }},
+                UNITY_USERNAME=${{ secrets.UNITY_USERNAME }},
+                UNITY_PASSWORD=${{ secrets.UNITY_PASSWORD }}
+              }" \
+              --tags PROJECT=ai4cw
+          fi
+      
+      - name: Create API Gateway
+        run: |
+          API_NAME="unity-slack-api"
+          FUNCTION_NAME="unity-slack-lambda"
+          
+          # Check if API exists
+          API_ID=$(aws apigateway get-rest-apis --query "items[?name=='$API_NAME'].id" --output text)
+          
+          if [ "$API_ID" = "None" ] || [ -z "$API_ID" ]; then
+            echo "Creating API Gateway..."
+            API_ID=$(aws apigateway create-rest-api \
+              --name $API_NAME \
+              --description "Unity Slack Bot API" \
+              --tags PROJECT=ai4cw \
+              --query 'id' --output text)
+          fi
+          
+          echo "API_ID=$API_ID" >> $GITHUB_ENV
+          
+          # Get root resource ID
+          ROOT_ID=$(aws apigateway get-resources --rest-api-id $API_ID --query "items[?path=='/'].id" --output text)
+          
+          # Create /slack resource if it doesn't exist
+          SLACK_RESOURCE_ID=$(aws apigateway get-resources --rest-api-id $API_ID --query "items[?pathPart=='slack'].id" --output text)
+          if [ "$SLACK_RESOURCE_ID" = "None" ] || [ -z "$SLACK_RESOURCE_ID" ]; then
+            SLACK_RESOURCE_ID=$(aws apigateway create-resource \
+              --rest-api-id $API_ID \
+              --parent-id $ROOT_ID \
+              --path-part slack \
+              --query 'id' --output text)
+          fi
+          
+          # Create POST method if it doesn't exist
+          if ! aws apigateway get-method --rest-api-id $API_ID --resource-id $SLACK_RESOURCE_ID --http-method POST 2>/dev/null; then
+            aws apigateway put-method \
+              --rest-api-id $API_ID \
+              --resource-id $SLACK_RESOURCE_ID \
+              --http-method POST \
+              --authorization-type NONE
+          fi
+          
+          # Set up Lambda integration
+          LAMBDA_ARN="arn:aws:lambda:${{ secrets.AWS_REGION }}:$AWS_ACCOUNT_ID:function:$FUNCTION_NAME"
+          aws apigateway put-integration \
+            --rest-api-id $API_ID \
+            --resource-id $SLACK_RESOURCE_ID \
+            --http-method POST \
+            --type AWS_PROXY \
+            --integration-http-method POST \
+            --uri "arn:aws:apigateway:${{ secrets.AWS_REGION }}:lambda:path/2015-03-31/functions/$LAMBDA_ARN/invocations"
+          
+          # Grant API Gateway permission to invoke Lambda
+          aws lambda add-permission \
+            --function-name $FUNCTION_NAME \
+            --statement-id apigateway-invoke-$(date +%s) \
+            --action lambda:InvokeFunction \
+            --principal apigateway.amazonaws.com \
+            --source-arn "arn:aws:execute-api:${{ secrets.AWS_REGION }}:$AWS_ACCOUNT_ID:$API_ID/*/*" \
+            || echo "Permission may already exist"
+          
+          # Deploy API
+          aws apigateway create-deployment \
+            --rest-api-id $API_ID \
+            --stage-name prod
+          
+          # Output the endpoint URL
+          ENDPOINT_URL="https://$API_ID.execute-api.${{ secrets.AWS_REGION }}.amazonaws.com/prod/slack"
+          echo "Slack Bot Endpoint: $ENDPOINT_URL"
+          echo "ENDPOINT_URL=$ENDPOINT_URL" >> $GITHUB_ENV
+      
+      - name: Output deployment info
+        run: |
+          echo "🚀 Deployment Complete!"
+          echo "Lambda Function: unity-slack-lambda"
+          echo "API Gateway Endpoint: $ENDPOINT_URL"
+          echo ""
+          echo "Configure this endpoint in your Slack app:"
+          echo "- Event Subscriptions Request URL: $ENDPOINT_URL"
+          echo "- Slash Commands Request URL: $ENDPOINT_URL"
