@@ -1,0 +1,32 @@
+region: us-east-1
+
+function_name: unity_slack_lambda
+handler: slack_lambda.handler
+description: Unity Slack Bot Lambda Function
+runtime: python3.12
+role: unity_slack_lambda_role
+
+timeout: 300
+memory_size: 1024
+
+# Slack events will come through API Gateway -> Lambda
+
+environment_variables:
+  SLACK_BOT_TOKEN: ${SLACK_BOT_TOKEN}
+  SLACK_SIGNING_SECRET: ${SLACK_SIGNING_SECRET}
+  AWS_REGION: ${AWS_REGION}
+  KNOWLEDGE_BASE_ID: ${KNOWLEDGE_BASE_ID}
+  S3_BUCKET_NAME: ${S3_BUCKET_NAME}
+  S3_FOLDER_PREFIX: ${S3_FOLDER_PREFIX}
+  UNITY_USERNAME: ${UNITY_USERNAME}
+  UNITY_PASSWORD: ${UNITY_PASSWORD}
+
+tags:
+  PROJECT: ai4cw
+  Environment: prod
+
+build:
+  source_directories: utils
+  
+# Ensure utils directory is included in Lambda package
+# This contains chatbot_helper.py and prompts.py
