@@ -88,6 +88,9 @@ jobs:
               --function-name $FUNCTION_NAME \
               --zip-file fileb://unity-slack-lambda.zip
             
+            echo "Waiting for function update to complete..."
+            aws lambda wait function-updated --function-name $FUNCTION_NAME
+            
             aws lambda update-function-configuration \
               --function-name $FUNCTION_NAME \
               --timeout 300 \
@@ -105,7 +108,7 @@ jobs:
             echo "Creating new Lambda function..."
             aws lambda create-function \
               --function-name $FUNCTION_NAME \
-              --runtime python3.9 \
+              --runtime python3.12 \
               --role $ROLE_ARN \
               --handler slack_lambda.handler \
               --zip-file fileb://unity-slack-lambda.zip \
