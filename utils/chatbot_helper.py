@@ -17,12 +17,21 @@ load_dotenv()
 # --- Initialization Functions ---
 def initialize_bedrock_client():
     """Initialize and return a Bedrock client using environment variables"""
-    return boto3.client(
-        service_name="bedrock-runtime",
-        region_name=os.getenv("AWS_REGION"),
-        aws_access_key_id=os.getenv("AWS_ACCESS_KEY_ID"),
-        aws_secret_access_key=os.getenv("AWS_SECRET_ACCESS_KEY"),
-    )
+    # In Lambda, use IAM role credentials automatically
+    # Only use explicit credentials if they exist (for local development)
+    if os.getenv("AWS_ACCESS_KEY_ID") and os.getenv("AWS_SECRET_ACCESS_KEY"):
+        return boto3.client(
+            service_name="bedrock-runtime",
+            region_name=os.getenv("AWS_REGION", "us-east-1"),
+            aws_access_key_id=os.getenv("AWS_ACCESS_KEY_ID"),
+            aws_secret_access_key=os.getenv("AWS_SECRET_ACCESS_KEY"),
+        )
+    else:
+        # Lambda environment - use IAM role
+        return boto3.client(
+            service_name="bedrock-runtime",
+            region_name=os.getenv("AWS_REGION", "us-east-1"),
+        )
 
 
 def initialize_llm(client, model_id="us.anthropic.claude-sonnet-4-20250514-v1:0"):
