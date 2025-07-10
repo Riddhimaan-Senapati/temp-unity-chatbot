@@ -181,93 +181,20 @@ jobs:
               --tags PROJECT=ai4cw
           fi
       
-      - name: Create API Gateway
+      - name: Create Lambda Function URL
         run: |
-          API_NAME="unity-slack-api"
           FUNCTION_NAME="unity-slack-lambda"
           
-          # Check if API exists
-          API_ID=$(aws apigateway get-rest-apis --query "items[?name=='$API_NAME'].id" --output text)
+          # Create Lambda Function URL
+          echo "Creating Lambda Function URL..."
+          aws lambda create-function-url-config \
+            --function-name $FUNCTION_NAME \
+            --auth-type NONE \
+            2>/dev/null || echo "Function URL already exists"
           
-          if [ "$API_ID" = "None" ] || [ -z "$API_ID" ]; then
-            echo "Creating API Gateway..."
-            API_ID=$(aws apigateway create-rest-api \
-              --name $API_NAME \
-              --description "Unity Slack Bot API" \
-              --tags PROJECT=ai4cw \
-              --query 'id' --output text)
-          else
-            echo "API Gateway already exists: $API_ID"
-            # Update tags if needed
-            aws apigateway tag-resource \
-              --resource-arn "arn:aws:apigateway:us-east-1::/restapis/$API_ID" \
-              --tags PROJECT=ai4cw || echo "Failed to update tags"
-          fi
-          
-          echo "API_ID=$API_ID" >> $GITHUB_ENV
-          
-          # Get root resource ID
-          ROOT_ID=$(aws apigateway get-resources --rest-api-id $API_ID --query "items[?path=='/'].id" --output text)
-          
-          # Create /slack resource if it doesn't exist
-          SLACK_RESOURCE_ID=$(aws apigateway get-resources --rest-api-id $API_ID --query "items[?pathPart=='slack'].id" --output text)
-          if [ "$SLACK_RESOURCE_ID" = "None" ] || [ -z "$SLACK_RESOURCE_ID" ]; then
-            echo "Creating /slack resource..."
-            SLACK_RESOURCE_ID=$(aws apigateway create-resource \
-              --rest-api-id $API_ID \
-              --parent-id $ROOT_ID \
-              --path-part slack \
-              --query 'id' --output text)
-          else
-            echo "/slack resource already exists"
-          fi
-          
-          # Create POST method if it doesn't exist
-          if ! aws apigateway get-method --rest-api-id $API_ID --resource-id $SLACK_RESOURCE_ID --http-method POST 2>/dev/null; then
-            echo "Creating POST method..."
-            aws apigateway put-method \
-              --rest-api-id $API_ID \
-              --resource-id $SLACK_RESOURCE_ID \
-              --http-method POST \
-              --authorization-type NONE
-          else
-            echo "POST method already exists"
-          fi
-          
-          # Set up Lambda integration (put-integration is idempotent)
-          LAMBDA_ARN="arn:aws:lambda:us-east-1:$AWS_ACCOUNT_ID:function:$FUNCTION_NAME"
-          echo "Setting up Lambda integration..."
-          aws apigateway put-integration \
-            --rest-api-id $API_ID \
-            --resource-id $SLACK_RESOURCE_ID \
-            --http-method POST \
-            --type AWS_PROXY \
-            --integration-http-method POST \
-            --uri "arn:aws:apigateway:us-east-1:lambda:path/2015-03-31/functions/$LAMBDA_ARN/invocations"
-          
-          # Grant API Gateway permission to invoke Lambda (check if exists first)
-          STATEMENT_ID="apigateway-invoke-unity-slack"
-          if ! aws lambda get-policy --function-name $FUNCTION_NAME --query "Policy" --output text 2>/dev/null | grep -q "$STATEMENT_ID"; then
-            echo "Adding Lambda permission for API Gateway..."
-            aws lambda add-permission \
-              --function-name $FUNCTION_NAME \
-              --statement-id $STATEMENT_ID \
-              --action lambda:InvokeFunction \
-              --principal apigateway.amazonaws.com \
-              --source-arn "arn:aws:execute-api:us-east-1:$AWS_ACCOUNT_ID:$API_ID/*/*"
-          else
-            echo "Lambda permission for API Gateway already exists"
-          fi
-          
-          # Deploy API (check if deployment needed)
-          echo "Deploying API to prod stage..."
-          aws apigateway create-deployment \
-            --rest-api-id $API_ID \
-            --stage-name prod \
-            --description "Deployment $(date +'%Y-%m-%d %H:%M:%S')"
-          
-          # Output the endpoint URL
-          ENDPOINT_URL="https://$API_ID.execute-api.us-east-1.amazonaws.com/prod/slack"
+          # Get the Function URL
+          FUNCTION_URL=$(aws lambda get-function-url-config --function-name $FUNCTION_NAME --query 'FunctionUrl' --output text)
+          ENDPOINT_URL="$FUNCTION_URL"
           echo "Slack Bot Endpoint: $ENDPOINT_URL"
           echo "ENDPOINT_URL=$ENDPOINT_URL" >> $GITHUB_ENV
       
@@ -280,3 +207,5 @@ jobs:
           echo "Configure this endpoint in your Slack app:"
           echo "- Event Subscriptions Request URL: $ENDPOINT_URL"
           echo "- Slash Commands Request URL: $ENDPOINT_URL"
+          echo ""
+          echo "Note: Using Lambda Function URL (no API Gateway) for better performance"
