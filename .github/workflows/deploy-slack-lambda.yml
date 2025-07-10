@@ -90,7 +90,7 @@ jobs:
           # Copy the entire 'utils' directory into the deployment package
           cp -r utils lambda-package/
           cd lambda-package
-          pip install -r ../slack_lambda_requirements.txt -t .
+          pip install -r ../slack_lambda/slack_lambda_requirements.txt -t .
           zip -r ../unity-slack-lambda.zip .
       
       - name: Deploy Lambda function
