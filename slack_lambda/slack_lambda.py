@@ -515,13 +515,24 @@ def handler(event, context):
     slack_handler = SlackRequestHandler(app=app)
     
     # Handle Slack URL verification challenge
-    body = json.loads(event["body"])
-    if "challenge" in body:
-        logger.info("Handling Slack URL verification challenge.")
-        return {
-            "statusCode": 200,
-            "headers": {"Content-Type": "text/plain"},
-            "body": body["challenge"],
-        }
-
+    try:
+        body = json.loads(event["body"])
+        if "challenge" in body:
+            logger.info("Handling Slack URL verification challenge.")
+            return {
+                "statusCode": 200,
+                "headers": {"Content-Type": "text/plain"},
+                "body": body["challenge"],
+            }
+        
+        # Check for retry header to prevent duplicate processing
+        headers = event.get("headers", {})
+        retry_num = headers.get("x-slack-retry-num")
+        if retry_num and int(retry_num) > 0:
+            logger.info(f"Ignoring Slack retry #{retry_num}")
+            return {"statusCode": 200, "body": "OK"}
+            
+    except Exception as e:
+        logger.error(f"Error parsing event body: {e}")
+    
     return slack_handler.handle(event, context)
