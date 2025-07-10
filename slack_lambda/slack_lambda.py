@@ -178,13 +178,6 @@ def process_user_message_with_slack_history(
         logger.error(f"Failed to initialize services: {e}")
         return "Sorry, the AI service is currently unavailable. Please check the logs or contact an administrator."
     
-    # Initialize services if not already done
-    try:
-        initialize_services()
-    except Exception as e:
-        logger.error(f"Failed to initialize services: {e}")
-        return "Sorry, the AI service is currently unavailable. Please check the logs or contact an administrator."
-    
     if not llm or not retriever:
         logger.error("LLM or Retriever not initialized. Cannot process message.")
         return "Sorry, the AI service is currently unavailable. Please check the logs or contact an administrator."
