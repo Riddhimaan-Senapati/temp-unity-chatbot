@@ -23,16 +23,19 @@ jobs:
       - name: Set up Python
         uses: actions/setup-python@v4
         with:
-          python-version: '3.12'
+          python-version: '3.12' # Corrected to Python 3.12 as per user instruction
       
       - name: Get AWS Account ID
         run: |
+          set -euxo pipefail # Enable debug and exit on error/unset variable/pipefail
           AWS_ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text)
           echo "AWS_ACCOUNT_ID=$AWS_ACCOUNT_ID" >> $GITHUB_ENV
           echo "Using AWS Account ID: $AWS_ACCOUNT_ID"
       
       - name: Create IAM role for Lambda
+        id: create_iam_role # Add an ID to this step to reference its outputs
         run: |
+          set -euxo pipefail # Enable debug and exit on error/unset variable/pipefail
           ROLE_NAME="unity-slack-lambda-role"
           
           # Check if role exists
@@ -67,22 +70,39 @@ jobs:
             aws iam attach-role-policy --role-name $ROLE_NAME --policy-arn arn:aws:iam::aws:policy/AmazonBedrockFullAccess 2>/dev/null || echo "Bedrock policy already attached"
             aws iam attach-role-policy --role-name $ROLE_NAME --policy-arn arn:aws:iam::aws:policy/AmazonS3ReadOnlyAccess 2>/dev/null || echo "S3 policy already attached"
           fi
+          
+          # Capture ROLE_ARN and set as output
+          ROLE_ARN_VALUE=$(aws iam get-role --role-name $ROLE_NAME --query 'Role.Arn' --output text)
+          echo "Resolved ROLE_ARN: $ROLE_ARN_VALUE"
+          echo "role_arn=$ROLE_ARN_VALUE" >> $GITHUB_OUTPUT # Set as step output
       
+      - name: Debug IAM Role Outputs
+        run: |
+          echo "Outputs from create_iam_role step:"
+          echo "role_arn: ${{ steps.create_iam_role.outputs.role_arn }}"
+
       - name: Create Lambda deployment package
         run: |
+          set -euxo pipefail # Enable debug and exit on error/unset variable/pipefail
           mkdir -p lambda-package
           # Copy slack_lambda.py from its new location into the root of the deployment package
           cp slack_lambda/slack_lambda.py lambda-package/
           # Copy the entire 'utils' directory into the deployment package
           cp -r utils lambda-package/
           cd lambda-package
-          pip install -r ../slack_lambda/slack_lambda_requirements.txt -t .
+          pip install -r ../slack_lambda_requirements.txt -t .
           zip -r ../unity-slack-lambda.zip .
       
       - name: Deploy Lambda function
         run: |
+          set -euxo pipefail # Enable debug and exit on error/unset variable/pipefail
           FUNCTION_NAME="unity-slack-lambda"
-          ROLE_ARN="arn:aws:iam::$AWS_ACCOUNT_ID:role/unity-slack-lambda-role"
+          
+          echo "Debug AWS_ACCOUNT_ID before ROLE_ARN definition: ${AWS_ACCOUNT_ID}" # Debug output
+          # Directly use the output from the create_iam_role step
+          LAMBDA_ROLE_ARN="${{ steps.create_iam_role.outputs.role_arn }}"
+          
+          echo "Debug ROLE_ARN before Lambda deployment: ${LAMBDA_ROLE_ARN}" # Debug output
           
           if aws lambda get-function --function-name $FUNCTION_NAME 2>/dev/null; then
             echo "Updating existing Lambda function..."
@@ -110,8 +130,8 @@ jobs:
             echo "Creating new Lambda function..."
             aws lambda create-function \
               --function-name $FUNCTION_NAME \
-              --runtime python3.9 \ # Ensure runtime matches the python-version used for packaging
-              --role $ROLE_ARN \
+              --runtime python3.12 \ # Corrected runtime to python3.12
+              --role "$LAMBDA_ROLE_ARN" \ 
               --handler slack_lambda.handler \
               --zip-file fileb://unity-slack-lambda.zip \
               --timeout 300 \
