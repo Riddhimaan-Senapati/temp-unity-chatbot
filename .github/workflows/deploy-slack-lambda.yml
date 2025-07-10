@@ -83,10 +83,10 @@ jobs:
       - name: Create Lambda deployment package
         run: |
           mkdir -p lambda-package
-          cp slack_lambda.py lambda-package/
+          cp slack_lambda/slack_lambda.py lambda-package/
           cp -r utils lambda-package/
           cd lambda-package
-          pip install -r ../slack_lambda_requirements.txt -t .
+          pip install -r ../slack_lambda/slack_lambda_requirements.txt -t .
           zip -r ../unity-slack-lambda.zip .
       
       - name: Deploy Lambda function
