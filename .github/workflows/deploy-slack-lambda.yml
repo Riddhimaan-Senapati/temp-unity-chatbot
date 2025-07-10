@@ -86,8 +86,17 @@ jobs:
           cp slack_lambda/slack_lambda.py lambda-package/
           cp -r utils lambda-package/
           cd lambda-package
-          pip install -r ../slack_lambda/slack_lambda_requirements.txt -t .
-          zip -r ../unity-slack-lambda.zip .
+          pip install -r ../slack_lambda/slack_lambda_requirements.txt -t . --no-cache-dir
+          # Remove unnecessary files to reduce package size
+          find . -type d -name "__pycache__" -exec rm -rf {} + 2>/dev/null || true
+          find . -name "*.pyc" -delete 2>/dev/null || true
+          find . -name "*.pyo" -delete 2>/dev/null || true
+          find . -type d -name "*.dist-info" -exec rm -rf {} + 2>/dev/null || true
+          find . -type d -name "*.egg-info" -exec rm -rf {} + 2>/dev/null || true
+          # Remove test files and documentation
+          find . -name "test*" -type d -exec rm -rf {} + 2>/dev/null || true
+          find . -name "*test*" -name "*.py" -delete 2>/dev/null || true
+          zip -r ../unity-slack-lambda.zip . -x "*.pyc" "*/__pycache__/*" "*/test*"
       
       - name: Deploy Lambda function
         run: |
