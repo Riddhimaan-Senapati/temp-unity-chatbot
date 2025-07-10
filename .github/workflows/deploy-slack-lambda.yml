@@ -71,10 +71,12 @@ jobs:
       - name: Create Lambda deployment package
         run: |
           mkdir -p lambda-package
-          cp slack_lambda.py lambda-package/
+          # Copy slack_lambda.py from its new location into the root of the deployment package
+          cp slack_lambda/slack_lambda.py lambda-package/
+          # Copy the entire 'utils' directory into the deployment package
           cp -r utils lambda-package/
           cd lambda-package
-          pip install -r ../slack_lambda_requirements.txt -t .
+          pip install -r ../slack_lambda/slack_lambda_requirements.txt -t .
           zip -r ../unity-slack-lambda.zip .
       
       - name: Deploy Lambda function
@@ -108,7 +110,7 @@ jobs:
             echo "Creating new Lambda function..."
             aws lambda create-function \
               --function-name $FUNCTION_NAME \
-              --runtime python3.12 \
+              --runtime python3.9 \ # Ensure runtime matches the python-version used for packaging
               --role $ROLE_ARN \
               --handler slack_lambda.handler \
               --zip-file fileb://unity-slack-lambda.zip \
