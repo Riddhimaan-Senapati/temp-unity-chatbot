@@ -87,7 +87,7 @@ jobs:
           cp -r utils lambda-package/
           cd lambda-package
           # Only install essential Slack dependencies
-          pip install slack-bolt langchain-aws langchain-core boto3 requests -t . --no-cache-dir
+          pip install slack-bolt langchain-aws langchain-core boto3 requests python-dotenv -t . --no-cache-dir
           # Remove unnecessary files
           find . -type d -name "__pycache__" -exec rm -rf {} + 2>/dev/null || true
           find . -name "*.pyc" -delete 2>/dev/null || true
