@@ -5,6 +5,7 @@ import requests
 from langchain_core.messages import AIMessage, HumanMessage, SystemMessage
 from slack_bolt import App
 from slack_bolt.adapter.aws_lambda import SlackRequestHandler
+import json
 
 from utils.chatbot_helper import (
     initialize_bedrock_client,
@@ -517,5 +518,17 @@ SlackRequestHandler.clear_all_log_handlers()
 logging.basicConfig(format="%(asctime)s %(message)s", level=logging.DEBUG)
 
 def handler(event, context):
+    logger.info(f"Received event: {event}")
     slack_handler = SlackRequestHandler(app=app)
+    
+    # Handle Slack URL verification challenge
+    body = json.loads(event["body"])
+    if "challenge" in body:
+        logger.info("Handling Slack URL verification challenge.")
+        return {
+            "statusCode": 200,
+            "headers": {"Content-Type": "text/plain"},
+            "body": body["challenge"],
+        }
+
     return slack_handler.handle(event, context)
