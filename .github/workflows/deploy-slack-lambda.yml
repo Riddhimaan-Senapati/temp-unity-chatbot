@@ -59,6 +59,24 @@ jobs:
             aws iam attach-role-policy --role-name $ROLE_NAME --policy-arn arn:aws:iam::aws:policy/AmazonBedrockFullAccess
             aws iam attach-role-policy --role-name $ROLE_NAME --policy-arn arn:aws:iam::aws:policy/AmazonS3ReadOnlyAccess
             
+            # Add explicit Bedrock permissions
+            aws iam put-role-policy --role-name $ROLE_NAME --policy-name BedrockConversePolicy --policy-document '{
+              "Version": "2012-10-17",
+              "Statement": [
+                {
+                  "Effect": "Allow",
+                  "Action": [
+                    "bedrock:InvokeModel",
+                    "bedrock:Converse",
+                    "bedrock:ConverseStream",
+                    "bedrock:Retrieve",
+                    "bedrock:RetrieveAndGenerate"
+                  ],
+                  "Resource": "*"
+                }
+              ]
+            }'
+            
             echo "Waiting for role to be available..."
             sleep 10
           else
@@ -68,6 +86,24 @@ jobs:
             aws iam attach-role-policy --role-name $ROLE_NAME --policy-arn arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole 2>/dev/null || echo "Basic execution policy already attached"
             aws iam attach-role-policy --role-name $ROLE_NAME --policy-arn arn:aws:iam::aws:policy/AmazonBedrockFullAccess 2>/dev/null || echo "Bedrock policy already attached"
             aws iam attach-role-policy --role-name $ROLE_NAME --policy-arn arn:aws:iam::aws:policy/AmazonS3ReadOnlyAccess 2>/dev/null || echo "S3 policy already attached"
+            
+            # Add explicit Bedrock permissions for existing role
+            aws iam put-role-policy --role-name $ROLE_NAME --policy-name BedrockConversePolicy --policy-document '{
+              "Version": "2012-10-17",
+              "Statement": [
+                {
+                  "Effect": "Allow",
+                  "Action": [
+                    "bedrock:InvokeModel",
+                    "bedrock:Converse",
+                    "bedrock:ConverseStream",
+                    "bedrock:Retrieve",
+                    "bedrock:RetrieveAndGenerate"
+                  ],
+                  "Resource": "*"
+                }
+              ]
+            }' 2>/dev/null || echo "Bedrock Converse policy already attached"
           fi
           
           # Capture ROLE_ARN and set as output
