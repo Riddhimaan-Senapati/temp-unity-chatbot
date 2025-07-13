@@ -77,6 +77,22 @@ jobs:
               ]
             }'
             
+            # Add CloudWatch Logs permissions
+            aws iam put-role-policy --role-name $ROLE_NAME --policy-name CloudWatchLogsPolicy --policy-document '{
+              "Version": "2012-10-17",
+              "Statement": [
+                {
+                  "Effect": "Allow",
+                  "Action": [
+                    "logs:CreateLogGroup",
+                    "logs:CreateLogStream",
+                    "logs:PutLogEvents"
+                  ],
+                  "Resource": "arn:aws:logs:us-east-1:*:*"
+                }
+              ]
+            }'
+            
             echo "Waiting for role to be available..."
             sleep 10
           else
@@ -104,6 +120,22 @@ jobs:
                 }
               ]
             }' 2>/dev/null || echo "Bedrock Converse policy already attached"
+            
+            # Add CloudWatch Logs permissions for existing role
+            aws iam put-role-policy --role-name $ROLE_NAME --policy-name CloudWatchLogsPolicy --policy-document '{
+              "Version": "2012-10-17",
+              "Statement": [
+                {
+                  "Effect": "Allow",
+                  "Action": [
+                    "logs:CreateLogGroup",
+                    "logs:CreateLogStream",
+                    "logs:PutLogEvents"
+                  ],
+                  "Resource": "arn:aws:logs:us-east-1:*:*"
+                }
+              ]
+            }' 2>/dev/null || echo "CloudWatch Logs policy already attached"
           fi
           
           # Capture ROLE_ARN and set as output
