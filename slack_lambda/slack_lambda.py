@@ -533,7 +533,7 @@ def handler(event, context):
     
     # Handle Slack URL verification challenge
     try:
-        body = json.loads(event["body"])
+        body = json.loads(event["body"]) if isinstance(event.get("body"), str) else event.get("body", {})
         if "challenge" in body:
             logger.info("Handling Slack URL verification challenge.")
             return {
