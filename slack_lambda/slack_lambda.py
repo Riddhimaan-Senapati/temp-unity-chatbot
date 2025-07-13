@@ -528,29 +528,34 @@ SlackRequestHandler.clear_all_log_handlers()
 logging.basicConfig(format="%(asctime)s %(message)s", level=logging.DEBUG)
 
 def handler(event, context):
-    logger.info(f"Received event: {json.dumps(event, default=str)}")
+    # Force logging to work
+    print(f"Lambda invoked! Event: {json.dumps(event, default=str)}")
+    logger.info(f"Lambda invoked! Event: {json.dumps(event, default=str)}")
     
-    # Handle Slack URL verification challenge for Lambda Function URL
+    # Simple test response first
     try:
-        # Lambda Function URL format
-        if "body" in event:
-            body_str = event["body"]
-            logger.info(f"Raw body: {body_str}")
-            
-            if body_str:
-                body = json.loads(body_str)
-                logger.info(f"Parsed body: {body}")
-                
-                if "challenge" in body:
-                    logger.info(f"Challenge found: {body['challenge']}")
-                    return {
-                        "statusCode": 200,
-                        "headers": {"Content-Type": "text/plain"},
-                        "body": body["challenge"],
-                    }
+        # Check if this is a simple test
+        if event.get("test"):
+            print("Test request received")
+            return {"statusCode": 200, "body": "Lambda is working!"}
+        
+        # Handle Slack challenge
+        body_str = event.get("body", "")
+        if body_str:
+            body = json.loads(body_str) if isinstance(body_str, str) else body_str
+            if "challenge" in body:
+                challenge = body["challenge"]
+                print(f"Slack challenge: {challenge}")
+                return {
+                    "statusCode": 200,
+                    "headers": {"Content-Type": "text/plain"},
+                    "body": challenge
+                }
     except Exception as e:
-        logger.error(f"Error handling challenge: {e}")
+        print(f"Error in handler: {e}")
+        logger.error(f"Error in handler: {e}")
+        return {"statusCode": 500, "body": f"Error: {e}"}
     
-    # Use Slack handler for normal events
+    # Use Slack handler
     slack_handler = SlackRequestHandler(app=app)
     return slack_handler.handle(event, context)
