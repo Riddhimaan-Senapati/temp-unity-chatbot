@@ -185,6 +185,9 @@ jobs:
         run: |
           FUNCTION_NAME="unity-slack-lambda"
           
+          # Delete any existing API Gateway permissions
+          aws lambda remove-permission --function-name $FUNCTION_NAME --statement-id apigateway-invoke-unity-slack 2>/dev/null || echo "No API Gateway permission to remove"
+          
           # Create Lambda Function URL
           echo "Creating Lambda Function URL..."
           aws lambda create-function-url-config \
