@@ -528,28 +528,29 @@ SlackRequestHandler.clear_all_log_handlers()
 logging.basicConfig(format="%(asctime)s %(message)s", level=logging.DEBUG)
 
 def handler(event, context):
-    logger.info(f"Received event: {event}")
-    slack_handler = SlackRequestHandler(app=app)
+    logger.info(f"Received event: {json.dumps(event, default=str)}")
     
-    # Handle Slack URL verification challenge
+    # Handle Slack URL verification challenge for Lambda Function URL
     try:
-        body = json.loads(event["body"]) if isinstance(event.get("body"), str) else event.get("body", {})
-        if "challenge" in body:
-            logger.info("Handling Slack URL verification challenge.")
-            return {
-                "statusCode": 200,
-                "headers": {"Content-Type": "text/plain"},
-                "body": body["challenge"],
-            }
-        
-        # Check for retry header to prevent duplicate processing
-        headers = event.get("headers", {})
-        retry_num = headers.get("x-slack-retry-num")
-        if retry_num and int(retry_num) > 0:
-            logger.info(f"Ignoring Slack retry #{retry_num}")
-            return {"statusCode": 200, "body": "OK"}
+        # Lambda Function URL format
+        if "body" in event:
+            body_str = event["body"]
+            logger.info(f"Raw body: {body_str}")
             
+            if body_str:
+                body = json.loads(body_str)
+                logger.info(f"Parsed body: {body}")
+                
+                if "challenge" in body:
+                    logger.info(f"Challenge found: {body['challenge']}")
+                    return {
+                        "statusCode": 200,
+                        "headers": {"Content-Type": "text/plain"},
+                        "body": body["challenge"],
+                    }
     except Exception as e:
-        logger.error(f"Error parsing event body: {e}")
+        logger.error(f"Error handling challenge: {e}")
     
+    # Use Slack handler for normal events
+    slack_handler = SlackRequestHandler(app=app)
     return slack_handler.handle(event, context)
