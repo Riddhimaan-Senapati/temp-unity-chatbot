@@ -154,7 +154,10 @@ jobs:
           echo "Contents of lambda-package after pip install:"
           ls -lR .
           echo "Checking slack-bolt version:"
-          python -c "import slack_bolt; print(slack_bolt.__version__)" || echo "slack_bolt not found or version check failed"
+          # Use a temporary file to capture output reliably
+          python -c "import slack_bolt; print(slack_bolt.__version__)" > /tmp/slack_bolt_version.txt 2>&1 || echo "slack_bolt not found or version check failed (see /tmp/slack_bolt_version.txt for details)"
+          cat /tmp/slack_bolt_version.txt || true # Print content of temp file
+          rm -f /tmp/slack_bolt_version.txt || true # Clean up temp file
           # --- END DEBUG STEP ---
           # Remove unnecessary files
           find . -type d -name "__pycache__" -exec rm -rf {} + 2>/dev/null || true
