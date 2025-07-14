@@ -144,8 +144,10 @@ jobs:
         run: |
           rm -rf lambda-package # Explicitly remove the directory
           mkdir -p lambda-package
+          # Aggressively uninstall existing slack-bolt to prevent conflicts
+          pip uninstall -y slack-bolt || true
           # Install dependencies into the root of the deployment package
-          pip install -r slack_lambda/slack_lambda_requirements.txt -t lambda-package --no-cache-dir --upgrade
+          pip install -r slack_lambda/slack_lambda_requirements.txt --target=./lambda-package/ --no-cache-dir --upgrade
           # Copy slack_lambda.py and utils directory to the root of the deployment package
           cp slack_lambda/slack_lambda.py lambda-package/
           cp -r utils lambda-package/
@@ -154,10 +156,13 @@ jobs:
           echo "Contents of lambda-package after pip install:"
           ls -lR .
           echo "Checking slack-bolt version:"
-          # Use a temporary file to capture output reliably
-          python -c "import slack_bolt; print(slack_bolt.__version__)" > /tmp/slack_bolt_version.txt 2>&1 || echo "slack_bolt not found or version check failed (see /tmp/slack_bolt_version.txt for details)"
-          cat /tmp/slack_bolt_version.txt || true # Print content of temp file
-          rm -f /tmp/slack_bolt_version.txt || true # Clean up temp file
+          # More robust check: list content of slack_bolt directory and try importing its init file
+          echo "Contents of slack_bolt installation directory:"
+          ls -lR ./slack_bolt || echo "slack_bolt directory not found"
+          echo "Attempting verbose import of slack_bolt:"
+          python -c "import sys; sys.path.insert(0, '.'); import slack_bolt; print('Successfully imported slack_bolt'); print(f'slack_bolt.__file__: {slack_bolt.__file__}'); print(f'slack_bolt.__path__: {slack_bolt.__path__}'); print(f'slack_bolt.__version__: {slack_bolt.__version__}')" > /tmp/slack_bolt_debug.txt 2>&1 || echo "Verbose slack_bolt import failed (see /tmp/slack_bolt_debug.txt for details)"
+          cat /tmp/slack_bolt_debug.txt || true # Print content of temp file
+          rm -f /tmp/slack_bolt_debug.txt || true # Clean up temp file
           # --- END DEBUG STEP ---
           # Remove unnecessary files
           find . -type d -name "__pycache__" -exec rm -rf {} + 2>/dev/null || true
