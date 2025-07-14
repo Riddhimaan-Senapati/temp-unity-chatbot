@@ -1,1 +1,6 @@
 slack-bolt==1.23.0
+langchain-aws
+langchain-core
+boto3 
+requests 
+python-dotenv

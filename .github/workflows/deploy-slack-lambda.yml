@@ -144,11 +144,15 @@ jobs:
         run: |
           rm -rf lambda-package # Explicitly remove the directory
           mkdir -p lambda-package
+          # Ensure slack_lambda.py is at the root of the deployment package
           cp slack_lambda/slack_lambda.py lambda-package/
+          # Create vendor directory inside lambda-package
+          mkdir -p lambda-package/vendor
+          # Install dependencies into the vendor directory
+          pip install -r slack_lambda/slack_lambda_requirements.txt -t lambda-package/vendor --no-cache-dir --upgrade
+          # Copy utils directory to lambda-package, which is needed by slack_lambda.py
           cp -r utils lambda-package/
           cd lambda-package
-          # Install dependencies from requirements.txt, ensuring upgrade and no caching
-          pip install -r ../slack_lambda/slack_lambda_requirements.txt -t . --no-cache-dir --upgrade
           # --- DEBUG STEP: Verify slack-bolt version and package contents ---
           echo "Contents of lambda-package after pip install:"
           ls -lR .

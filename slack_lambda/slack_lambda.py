@@ -1,9 +1,13 @@
 import logging
 import os
 import json
+import sys # Added sys import
 
 from slack_bolt import App
 from slack_bolt.adapter.aws_lambda import SlackRequestHandler
+
+# Add the 'vendor' directory to the Python path to ensure bundled dependencies are found
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), 'vendor'))
 
 # Debugging: Print slack_bolt version at runtime
 try:
