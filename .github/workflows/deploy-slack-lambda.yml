@@ -144,13 +144,10 @@ jobs:
         run: |
           rm -rf lambda-package # Explicitly remove the directory
           mkdir -p lambda-package
-          # Ensure slack_lambda.py is at the root of the deployment package
+          # Install dependencies into the root of the deployment package
+          pip install -r slack_lambda/slack_lambda_requirements.txt -t lambda-package --no-cache-dir --upgrade
+          # Copy slack_lambda.py and utils directory to the root of the deployment package
           cp slack_lambda/slack_lambda.py lambda-package/
-          # Create vendor directory inside lambda-package
-          mkdir -p lambda-package/vendor
-          # Install dependencies into the vendor directory
-          pip install -r slack_lambda/slack_lambda_requirements.txt -t lambda-package/vendor --no-cache-dir --upgrade
-          # Copy utils directory to lambda-package, which is needed by slack_lambda.py
           cp -r utils lambda-package/
           cd lambda-package
           # --- DEBUG STEP: Verify slack-bolt version and package contents ---
@@ -162,8 +159,6 @@ jobs:
           # Remove unnecessary files
           find . -type d -name "__pycache__" -exec rm -rf {} + 2>/dev/null || true
           find . -name "*.pyc" -delete 2>/dev/null || true
-          find . -type d -name "*.dist-info" -exec rm -rf {} + 2>/dev/null || true
-          find . -type d -name "*.egg-info" -exec rm -rf {} + 2>/dev/null || true
           find . -name "test*" -type d -exec rm -rf {} + 2>/dev/null || true
           zip -r ../unity-slack-lambda.zip . -x "*.pyc" "*/__pycache__/*"
       
