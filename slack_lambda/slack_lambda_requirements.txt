@@ -1,6 +1,6 @@
-slack-bolt
-langchain-aws
-langchain-core
-boto3 
-requests 
-python-dotenv
+slack-bolt==1.23.0
+langchain-aws==0.2.23
+langchain-core==0.3.59
+boto3==1.38.16
+requests==2.32.3
+python-dotenv==1.1.0
