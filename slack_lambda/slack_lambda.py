@@ -37,9 +37,6 @@ retriever = None
 bot_user_id = None
 bot_id_from_auth = None
 
-# Event deduplication - store processed event IDs
-processed_events = set()
-
 def initialize_services():
     global bedrock_client, llm, retriever, bot_user_id, bot_id_from_auth
     
@@ -364,20 +361,13 @@ def process_user_message_with_slack_history(
 @app.event("app_mention")
 def handle_app_mention_events(body, say, client):
     event = body["event"]
-    current_message_ts = event["ts"]
-    
-    # Deduplicate events using timestamp
-    if current_message_ts in processed_events:
-        logger.info(f"Ignoring duplicate app_mention event: {current_message_ts}")
-        return
-    processed_events.add(current_message_ts)
-    
     user_text_raw = event["text"]
     user_id = event["user"]
     channel_id = event["channel"]
     files = event.get("files", [])  # Get list of files from the event
 
-    thread_ts_for_history = event.get("thread_ts", current_message_ts)
+    thread_ts_for_history = event.get("thread_ts", event["ts"])
+    current_message_ts = event["ts"]
 
     logger.info(
         f"APP_MENTION event triggered. User: {user_id}, Channel: {channel_id}, "
@@ -429,19 +419,12 @@ def handle_app_mention_events(body, say, client):
 # Event Listener for Messages (Follow-ups in Threads and DMs)
 @app.event("message")
 def handle_message_events(body, message, say, client):
-    current_message_ts = message.get("ts")
-    
-    # Deduplicate events using timestamp
-    if current_message_ts in processed_events:
-        logger.info(f"Ignoring duplicate message event: {current_message_ts}")
-        return
-    processed_events.add(current_message_ts)
-    
     channel_type = message.get("channel_type")
     user_id = message.get("user")
     text_raw = message.get("text", "")  # Default to empty string
     files = message.get("files", [])  # Get list of files from the event
     event_thread_ts = message.get("thread_ts")
+    current_message_ts = message.get("ts")
     channel_id = message.get("channel")
 
     # Ignore message if it has no text and no files
