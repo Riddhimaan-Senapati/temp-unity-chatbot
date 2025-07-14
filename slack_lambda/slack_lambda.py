@@ -360,6 +360,12 @@ def process_user_message_with_slack_history(
 #  Event Listener for App Mentions (New Conversations OR Mentions in existing threads)
 @app.event("app_mention")
 def handle_app_mention_events(body, say, client):
+    # Check for Slack retries
+    retry_num = body.get("X-Slack-Retry-Num")
+    if retry_num and int(retry_num) > 0:
+        logger.info(f"Ignoring app_mention retry event (X-Slack-Retry-Num: {retry_num}).")
+        return
+
     event = body["event"]
     user_text_raw = event["text"]
     user_id = event["user"]
@@ -419,6 +425,12 @@ def handle_app_mention_events(body, say, client):
 # Event Listener for Messages (Follow-ups in Threads and DMs)
 @app.event("message")
 def handle_message_events(body, message, say, client):
+    # Check for Slack retries for message events
+    retry_num = body.get("X-Slack-Retry-Num")
+    if retry_num and int(retry_num) > 0:
+        logger.info(f"Ignoring message retry event (X-Slack-Retry-Num: {retry_num}).")
+        return
+
     channel_type = message.get("channel_type")
     user_id = message.get("user")
     text_raw = message.get("text", "")  # Default to empty string
