@@ -6,7 +6,6 @@ from langchain_core.messages import AIMessage, HumanMessage, SystemMessage
 from slack_bolt import App
 from slack_bolt.adapter.aws_lambda import SlackRequestHandler
 import json
-import boto3 # Added boto3 import
 
 from utils.chatbot_helper import (
     initialize_bedrock_client,
@@ -28,7 +27,7 @@ logger = logging.getLogger(__name__)
 app = App(
     token=os.environ.get("SLACK_BOT_TOKEN"),
     signing_secret=os.environ.get("SLACK_SIGNING_SECRET"),
-    process_before_response=False # Changed to False for immediate acknowledgment
+    process_before_response=True # Changed to True to enable lazy listeners
 )
 
 # LangChain Initializations - Initialize lazily to avoid Lambda cold start issues
@@ -358,51 +357,94 @@ def process_user_message_with_slack_history(
         return f"Sorry, I encountered an error trying to generate a response: {e}"
 
 
-#  Event Listener for App Mentions (New Conversations OR Mentions in existing threads)
-@app.event("app_mention")
-def handle_app_mention_events(body, say, client, ack): # Added ack parameter
-    ack() # Acknowledge the event immediately
-    # Check for Slack retries
-    retry_num = body.get("X-Slack-Retry-Num")
-    if retry_num and int(retry_num) > 0:
-        logger.info(f"Ignoring app_mention retry event (X-Slack-Retry-Num: {retry_num}).")
+# New lazy function to process Slack events asynchronously
+def process_slack_event_lazily(body, say, client, message=None):
+    # Extract necessary information based on event type
+    if "event" in body:
+        event = body["event"]
+        user_text_raw = event["text"]
+        channel_id = event["channel"]
+        files = event.get("files", [])
+        thread_ts_for_history = event.get("thread_ts", event["ts"])
+        current_message_ts = event["ts"]
+        event_type = event["type"]
+    elif "message" in body: # For 'message' events passed directly to lazy listener
+        event = message # In message events, 'message' param contains the event object
+        user_text_raw = event.get("text", "")
+        channel_id = event.get("channel")
+        files = event.get("files", [])
+        thread_ts_for_history = event.get("thread_ts") # message.get("thread_ts")
+        current_message_ts = event.get("ts")
+        event_type = "message"
+    else:
+        logger.error(f"Unknown event structure in lazy function: {json.dumps(body)}")
         return
 
-    event = body["event"]
-    user_text_raw = event["text"]
-    user_id = event["user"]
-    channel_id = event["channel"]
-    files = event.get("files", [])  # Get list of files from the event
-
-    thread_ts_for_history = event.get("thread_ts", event["ts"])
-    current_message_ts = event["ts"]
-
     logger.info(
-        f"APP_MENTION event triggered. User: {user_id}, Channel: {channel_id}, "
+        f"LAZY Processing triggered for {event_type} event. User: {user_id}, Channel: {channel_id}, "
         f"Message TS: {current_message_ts}, Thread TS for history: {thread_ts_for_history}. "
         f"Raw text: '{user_text_raw}', Files: {len(files)}"
     )
 
-    prompt_for_processing = user_text_raw
+    # Handle specific logic for 'message' events that are not app_mentions
+    if event_type == "message":
+        channel_type = event.get("channel_type")
+        user_id = event.get("user")
+        if user_id == bot_user_id or event.get("subtype") in [
+            "bot_message",
+            "message_deleted",
+            "message_changed",
+            "thread_broadcast",
+            "file_share",
+            "message_replied",
+            "channel_join",
+            "channel_leave",
+        ]:
+            logger.info(f"Ignoring MESSAGE event with subtype {event.get('subtype') or 'None'} or from bot itself.")
+            return
 
-    # Check if the message is empty (no text after removing mention and no files)
-    if (
-        bot_user_id
-        and not user_text_raw.replace(f"<@{bot_user_id}>", "").strip()
-        and not files
-    ):
-        logger.info(
-            f"App mention for thread {thread_ts_for_history} was empty. Sending generic help."
-        )
-        say(
-            text="Hi there! How can I help you today? Please ask me a question.",
-            thread_ts=thread_ts_for_history,
-        )
-        return
+        if bot_user_id and f"<@{bot_user_id}>" in user_text_raw:
+            logger.info(
+                f"MESSAGE event (ts: {current_message_ts}) contains a bot mention. "
+                f"Assuming app_mention handler will process. Skipping in message lazy handler."
+            )
+            return
 
-    # Pass the 'files' list to the processing function
+        if channel_type == "im" and not thread_ts_for_history:
+            thread_ts_for_history = current_message_ts
+        elif channel_type == "im" and thread_ts_for_history:
+            pass # thread_ts_for_history is already set
+        elif thread_ts_for_history: # Non-DM threaded message without mention
+            logger.info("MESSAGE event: Non-mention reply in channel/group thread. Bot not configured to respond. Ignoring.")
+            return
+        else: # Non-mention, non-threaded, non-DM message
+            logger.info("MESSAGE event: Non-mention, non-threaded, non-DM message. Bot not configured to respond. Ignoring.")
+            return
+
+        if not thread_ts_for_history:
+            logger.warning(
+                f"MESSAGE event: Could not determine thread_key_for_history. User: {user_id}, Text: '{user_text_raw}'. Ignoring."
+            )
+            return
+
+    # Check if the message is empty (no text after removing mention and no files) for app_mention
+    if event_type == "app_mention":
+        if (
+            bot_user_id
+            and not user_text_raw.replace(f"<@{bot_user_id}>", "").strip()
+            and not files
+        ):
+            logger.info(
+                f"App mention for thread {thread_ts_for_history} was empty. Sending generic help."
+            )
+            say(
+                text="Hi there! How can I help you today? Please ask me a question.",
+                thread_ts=thread_ts_for_history,
+            )
+            return
+
     response_text = process_user_message_with_slack_history(
-        client, channel_id, thread_ts_for_history, prompt_for_processing, files=files
+        client, channel_id, thread_ts_for_history, user_text_raw, files=files
     )
 
     try:
@@ -424,103 +466,18 @@ def handle_app_mention_events(body, say, client, ack): # Added ack parameter
             logger.error(f"Failed to send even error response via 'say': {e_say}")
 
 
-# Event Listener for Messages (Follow-ups in Threads and DMs)
-@app.event("message")
-def handle_message_events(body, message, say, client, ack): # Added ack parameter
+# Event Listener for App Mentions (New Conversations OR Mentions in existing threads)
+@app.event("app_mention", lazy=[process_slack_event_lazily]) # Added lazy listener
+def handle_app_mention_events(body, ack):
     ack() # Acknowledge the event immediately
-    # Check for Slack retries for message events
-    retry_num = body.get("X-Slack-Retry-Num")
-    if retry_num and int(retry_num) > 0:
-        logger.info(f"Ignoring message retry event (X-Slack-Retry-Num: {retry_num}).")
-        return
+    # No need for retry check here, lazy listener handles it
 
-    channel_type = message.get("channel_type")
-    user_id = message.get("user")
-    text_raw = message.get("text", "")  # Default to empty string
-    files = message.get("files", [])  # Get list of files from the event
-    event_thread_ts = message.get("thread_ts")
-    current_message_ts = message.get("ts")
-    channel_id = message.get("channel")
 
-    # Ignore message if it has no text and no files
-    if not text_raw and not files:
-        return
-
-    if user_id == bot_user_id or message.get("subtype") in [
-        "bot_message",
-        "message_deleted",
-        "message_changed",
-        "thread_broadcast",
-        "file_share",  # We handle files inside the message payload, not this subtype
-        "message_replied",
-        "channel_join",
-        "channel_leave",
-    ]:
-        return
-
-    if bot_user_id and f"<@{bot_user_id}>" in text_raw:
-        logger.info(
-            f"MESSAGE event (ts: {current_message_ts}) contains a bot mention. "
-            f"Assuming app_mention handler will process. Skipping in message handler."
-        )
-        return
-
-    thread_key_for_history = None
-    prompt_for_processing = text_raw
-
-    if channel_type == "im" and not event_thread_ts:
-        thread_key_for_history = current_message_ts
-        logger.info(
-            f"MESSAGE event: New DM. User: {user_id}, Channel: {channel_id}, "
-            f"Message TS (used as thread_key): {thread_key_for_history}. Raw text: '{text_raw}', Files: {len(files)}"
-        )
-    elif channel_type == "im" and event_thread_ts:
-        thread_key_for_history = event_thread_ts
-        logger.info(
-            f"MESSAGE event: Reply in DM thread. User: {user_id}, Channel: {channel_id}, "
-            f"Message TS: {current_message_ts}, Thread TS: {thread_key_for_history}. Raw text: '{text_raw}', Files: {len(files)}"
-        )
-    elif event_thread_ts:
-        logger.info(
-            f"MESSAGE event: Non-mention reply in channel/group thread {event_thread_ts}. Bot not configured to respond. Ignoring."
-        )
-        return
-    else:
-        logger.info(
-            f"MESSAGE event: Non-mention, non-threaded, non-DM message from {user_id}. Bot not configured to respond. Ignoring."
-        )
-        return
-
-    if not thread_key_for_history:
-        logger.warning(
-            f"MESSAGE event: Could not determine thread_key_for_history. User: {user_id}, Text: '{text_raw}'. Ignoring."
-        )
-        return
-
-    # Pass the 'files' list to the processing function
-    response_text = process_user_message_with_slack_history(
-        client, channel_id, thread_key_for_history, prompt_for_processing, files=files
-    )
-
-    try:
-        say(text=response_text, thread_ts=thread_key_for_history)
-        logger.info(
-            f"Successfully sent LLM response via 'say' to thread/DM {thread_key_for_history} from message handler."
-        )
-    except Exception as e:
-        logger.error(
-            f"Error sending LLM response via 'say' to thread/DM {thread_key_for_history} from message handler: {e}",
-            exc_info=True,
-        )
-        try:
-            say(
-                text="Sorry, I couldn't send my response.",
-                thread_ts=thread_key_for_history,
-            )
-        except Exception as e_say:
-            logger.error(
-                f"Failed to send even error response via 'say' from message handler: {e_say}"
-            )
+# Event Listener for Messages (Follow-ups in Threads and DMs)
+@app.event("message", lazy=[process_slack_event_lazily]) # Added lazy listener
+def handle_message_events(body, ack):
+    ack() # Acknowledge the event immediately
+    # No need for retry check here, lazy listener handles it
 
 SlackRequestHandler.clear_all_log_handlers()
 logging.basicConfig(format="%(asctime)s %(message)s", level=logging.DEBUG)
@@ -531,51 +488,20 @@ def handler(event, context):
     print(f"Lambda invoked! Event: {json.dumps(event, default=str)}")
     logger.info(f"Lambda invoked! Event: {json.dumps(event, default=str)}")
 
-    # Check for Slack URL verification challenge
+    # Check for Slack URL verification challenge (keep this, it's independent of lazy/async)
     if "challenge" in event.get("body", ""):
         try:
-            body = json.loads(event["body"]) if isinstance(event["body"], str) else event["body"]
-            if "challenge" in body:
-                challenge = body["challenge"]
+            body_content = json.loads(event["body"]) if isinstance(event["body"], str) else event["body"]
+            if "challenge" in body_content:
+                challenge = body_content["challenge"]
                 print(f"Slack challenge: {challenge}")
                 return {"statusCode": 200, "headers": {"Content-Type": "text/plain"}, "body": challenge}
         except Exception as e:
             logger.error(f"Error handling challenge: {e}", exc_info=True)
             return {"statusCode": 500, "body": "Error handling challenge."}
 
-    # Check if this is an asynchronous invocation (from a previous Lambda invocation)
-    if event.get("x-slack-async-invoke"):
-        logger.info("Asynchronous invocation detected. Processing event.")
-        # Process the actual Slack event
-        # The event passed to SlackRequestHandler.handle should be the original API Gateway event format
-        # So we need to reconstruct it from the 'original_event' payload.
-        original_event = event.get("original_event")
-        if original_event:
-            response = SlackRequestHandler(app).handle(original_event, context)
-            return response
-        else:
-            logger.error("Asynchronous invocation received without original_event payload.")
-            return {"statusCode": 500, "body": "Missing original event payload for async processing."}
-
-    # This is the initial API Gateway invocation from Slack.
-    # Immediately acknowledge to Slack to avoid retries due to cold starts.
-    print("Initial Slack invocation received. Acknowledging immediately and invoking asynchronously.")
-    lambda_client = boto3.client("lambda", region_name=os.environ.get("AWS_REGION", "us-east-1"))
-    try:
-        # Pass the original event and a flag to indicate asynchronous invocation
-        lambda_client.invoke(
-            FunctionName=context.function_name,
-            InvocationType="Event",  # Asynchronous invocation
-            Payload=json.dumps({"x-slack-async-invoke": True, "original_event": event})
-        )
-        return {"statusCode": 200, "body": ""}  # Respond quickly to Slack
-    except Exception as e:
-        logger.error(f"Error invoking self asynchronously: {e}", exc_info=True)
-        return {"statusCode": 500, "body": "Internal server error during async invocation."}
-
-    # This part should ideally not be reached if the above logic works.
-    # It's a fallback for unexpected scenarios or if `process_before_response=True` was intended to be used
-    # without explicit `ack()` in the handlers.
-    # Fallback if no async invocation happened (should not happen with the above changes)
-    response = SlackRequestHandler(app).handle(event, context)
+    # Pass the event directly to the SlackRequestHandler for processing.
+    # Slack Bolt's 'process_before_response=True' and 'lazy' listeners will handle
+    # immediate acknowledgment and asynchronous processing.
+    response = SlackRequestHandler(app=app).handle(event, context)
     return response
