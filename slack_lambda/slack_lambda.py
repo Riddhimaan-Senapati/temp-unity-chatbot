@@ -6,6 +6,7 @@ from langchain_core.messages import AIMessage, HumanMessage, SystemMessage
 from slack_bolt import App
 from slack_bolt.adapter.aws_lambda import SlackRequestHandler
 import json
+import boto3 # Added boto3 import
 
 from utils.chatbot_helper import (
     initialize_bedrock_client,
@@ -524,35 +525,51 @@ def handle_message_events(body, message, say, client, ack): # Added ack paramete
 SlackRequestHandler.clear_all_log_handlers()
 logging.basicConfig(format="%(asctime)s %(message)s", level=logging.DEBUG)
 
+
 def handler(event, context):
     # Force logging to work
     print(f"Lambda invoked! Event: {json.dumps(event, default=str)}")
     logger.info(f"Lambda invoked! Event: {json.dumps(event, default=str)}")
-    
-    # Simple test response first
-    try:
-        # Check if this is a simple test
-        if event.get("test"):
-            print("Test request received")
-            return {"statusCode": 200, "body": "Lambda is working!"}
-        
-        # Handle Slack challenge
-        body_str = event.get("body", "")
-        if body_str:
-            body = json.loads(body_str) if isinstance(body_str, str) else body_str
+
+    # Check for Slack URL verification challenge
+    if "challenge" in event.get("body", ""): # check for challenge in event body
+        try:
+            body = json.loads(event["body"]) if isinstance(event["body"], str) else event["body"]
             if "challenge" in body:
                 challenge = body["challenge"]
                 print(f"Slack challenge: {challenge}")
-                return {
-                    "statusCode": 200,
-                    "headers": {"Content-Type": "text/plain"},
-                    "body": challenge
-                }
+                return {"statusCode": 200, "headers": {"Content-Type": "text/plain"}, "body": challenge}
+        except Exception as e:
+            logger.error(f"Error handling challenge: {e}", exc_info=True)
+            return {"statusCode": 500, "body": "Error handling challenge."}
+
+    # Check if this is an asynchronous invocation (from a previous Lambda invocation)
+    if event.get("source") == "lambda" and event.get("detail-type") == "Scheduled Event": # This will be changed to a custom marker for self-invocation
+        logger.info("Asynchronous invocation detected. Processing event.")
+        # Process the actual Slack event
+        slack_event_payload = json.loads(event["detail"]["body"]) # Assuming the full Slack event is in detail.body
+        response = SlackRequestHandler(app).handle(slack_event_payload, context)
+        return response
+
+    # This is the initial API Gateway invocation from Slack.
+    # Immediately acknowledge to Slack to avoid retries due to cold starts.
+    print("Initial Slack invocation received. Acknowledging immediately and invoking asynchronously.")
+    lambda_client = boto3.client("lambda", region_name=os.environ.get("AWS_REGION", "us-east-1"))
+    try:
+        lambda_client.invoke(
+            FunctionName=context.function_name,
+            InvocationType="Event",  # Asynchronous invocation
+            Payload=json.dumps({"source": "lambda", "detail-type": "Scheduled Event", "detail": {"body": event.get("body")}})
+            # We'll refine the payload for self-invocation detection
+        )
+        return {"statusCode": 200, "body": ""}  # Respond quickly to Slack
     except Exception as e:
-        print(f"Error in handler: {e}")
-        logger.error(f"Error in handler: {e}")
-        return {"statusCode": 500, "body": f"Error: {e}"}
-    
-    # Use Slack handler
-    slack_handler = SlackRequestHandler(app=app)
-    return slack_handler.handle(event, context)
+        logger.error(f"Error invoking self asynchronously: {e}", exc_info=True)
+        return {"statusCode": 500, "body": "Internal server error during async invocation."}
+
+    # This part should ideally not be reached if the above logic works.
+    # It's a fallback for unexpected scenarios or if `process_before_response=True` was intended to be used
+    # without explicit `ack()` in the handlers.
+    # Fallback if no async invocation happened (should not happen with the above changes)
+    response = SlackRequestHandler(app).handle(event, context)
+    return response
