@@ -1,18 +1,40 @@
 import logging
 import os
 import json
-import boto3  # Re-added boto3 import
+import boto3
 
+from langchain_core.messages import AIMessage, HumanMessage, SystemMessage # Added Langchain message types
 from slack_bolt import App
 from slack_bolt.adapter.aws_lambda import SlackRequestHandler
 
 # Re-added Bedrock and related imports
 from utils.chatbot_helper import (
-    convert_to_langchain_messages,
+    ConversationManager,
     logger as chatbot_logger,
     initialize_llm,
-    initialize_knowledge_base_retriever,
+    initialize_knowledge_base_retriever
 )
+
+# Define convert_to_langchain_messages locally
+def convert_to_langchain_messages(slack_messages, bot_user_id):
+    langchain_messages = []
+    for msg in slack_messages:
+        # Skip bot messages that are not responses from our bot (e.g., app mention itself)
+        if msg.get("bot_id") and msg.get("bot_id") != bot_user_id:
+            continue
+
+        text = msg.get("text", "").strip()
+        if not text:
+            continue
+
+        # Determine sender and message type
+        if msg.get("user") == bot_user_id or msg.get("bot_id") == bot_user_id:
+            # Message from the bot
+            langchain_messages.append(AIMessage(content=text))
+        else:
+            # Message from a user
+            langchain_messages.append(HumanMessage(content=text))
+    return langchain_messages
 
 # Initialize global variables for Bedrock client, LLM, and retriever
 bedrock_client = None
