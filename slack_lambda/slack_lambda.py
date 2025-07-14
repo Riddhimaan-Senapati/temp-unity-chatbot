@@ -1,22 +1,13 @@
 import logging
 import os
 import json
-import sys # Added sys import
+import sys # Added sys import back
 
 from slack_bolt import App
 from slack_bolt.adapter.aws_lambda import SlackRequestHandler
 
 # Add the 'vendor' directory to the Python path to ensure bundled dependencies are found
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), 'vendor'))
-
-# Debugging: Print slack_bolt version at runtime
-try:
-    import slack_bolt
-    print(f"DEBUG: slack_bolt version loaded at runtime: {slack_bolt.__version__}")
-except ImportError:
-    print("DEBUG: slack_bolt not found at runtime.")
-except Exception as e:
-    print(f"DEBUG: Error checking slack_bolt version: {e}")
 
 # process_before_response must be True when running on FaaS
 app = App(
