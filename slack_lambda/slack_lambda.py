@@ -27,7 +27,7 @@ logger = logging.getLogger(__name__)
 app = App(
     token=os.environ.get("SLACK_BOT_TOKEN"),
     signing_secret=os.environ.get("SLACK_SIGNING_SECRET"),
-    process_before_response=True
+    process_before_response=False # Changed to False for immediate acknowledgment
 )
 
 # LangChain Initializations - Initialize lazily to avoid Lambda cold start issues
@@ -359,7 +359,8 @@ def process_user_message_with_slack_history(
 
 #  Event Listener for App Mentions (New Conversations OR Mentions in existing threads)
 @app.event("app_mention")
-def handle_app_mention_events(body, say, client):
+def handle_app_mention_events(body, say, client, ack): # Added ack parameter
+    ack() # Acknowledge the event immediately
     # Check for Slack retries
     retry_num = body.get("X-Slack-Retry-Num")
     if retry_num and int(retry_num) > 0:
@@ -424,7 +425,8 @@ def handle_app_mention_events(body, say, client):
 
 # Event Listener for Messages (Follow-ups in Threads and DMs)
 @app.event("message")
-def handle_message_events(body, message, say, client):
+def handle_message_events(body, message, say, client, ack): # Added ack parameter
+    ack() # Acknowledge the event immediately
     # Check for Slack retries for message events
     retry_num = body.get("X-Slack-Retry-Num")
     if retry_num and int(retry_num) > 0:
