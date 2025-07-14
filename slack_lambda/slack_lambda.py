@@ -9,7 +9,6 @@ from slack_bolt.adapter.aws_lambda import SlackRequestHandler
 
 # Re-added Bedrock and related imports
 from utils.chatbot_helper import (
-    ConversationManager,
     logger as chatbot_logger,
     initialize_llm,
     initialize_knowledge_base_retriever
@@ -59,17 +58,12 @@ def process_slack_event_lazily(body, say, client):
         try:
             print("Initializing Bedrock client, LLM, and retriever...")
             # Changed to bedrock-agent-runtime as used in chatbot_helper
-            bedrock_client = boto3.client(
-                "bedrock-agent-runtime", region_name="us-east-1"
-            )
+            bedrock_client = boto3.client("bedrock-agent-runtime", region_name='us-east-1') 
             llm = initialize_llm(bedrock_client)
-            retriever = initialize_knowledge_base_retriever()
+            retriever = initialize_knowledge_base_retriever() # Use initialize_knowledge_base_retriever function
             print("Initialization complete.")
         except Exception as e:
-            chatbot_logger.error(
-                f"Error during Bedrock client/LLM/retriever initialization: {e}",
-                exc_info=True,
-            )
+            chatbot_logger.error(f"Error during Bedrock client/LLM/retriever initialization: {e}", exc_info=True)
             say(f"Error initializing bot components: {e}")
             return
 
@@ -122,8 +116,9 @@ def process_slack_event_lazily(body, say, client):
     try:
         # Generate response using BedrockAgent (assuming invoke now directly returns text and sources)
         response_text, sources = llm.invoke(
-            user_text_raw, conversation_history, retriever
-        )
+            conversation_history + [HumanMessage(content=user_text_query)],
+            config={'retriever': retriever} if retriever else None
+        ) # Modified invoke call to use correct Langchain format and pass retriever as config
 
         # Remove bot mention from the user query
         bot_id = os.environ.get("SLACK_BOT_ID")
