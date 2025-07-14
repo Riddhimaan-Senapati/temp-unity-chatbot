@@ -9,10 +9,12 @@ from slack_bolt.adapter.aws_lambda import SlackRequestHandler
 
 # Re-added Bedrock and related imports
 from utils.chatbot_helper import (
-    logger as chatbot_logger,
     initialize_llm,
     initialize_knowledge_base_retriever
 )
+
+# Initialize a logger for this module
+logger = logging.getLogger(__name__)
 
 # Define convert_to_langchain_messages locally
 def convert_to_langchain_messages(slack_messages, bot_user_id):
@@ -63,14 +65,14 @@ def process_slack_event_lazily(body, say, client):
             retriever = initialize_knowledge_base_retriever() # Use initialize_knowledge_base_retriever function
             print("Initialization complete.")
         except Exception as e:
-            chatbot_logger.error(f"Error during Bedrock client/LLM/retriever initialization: {e}", exc_info=True)
+            logger.error(f"Error during Bedrock client/LLM/retriever initialization: {e}", exc_info=True)
             say(f"Error initializing bot components: {e}")
             return
 
     # Only process if the message is new and not a retry from Slack
     retry_num = body.get("X-Slack-Retry-Num")
     if retry_num and int(retry_num) > 0:
-        chatbot_logger.info(f"Ignoring retry event (X-Slack-Retry-Num: {retry_num}).")
+        logger.info(f"Ignoring retry event (X-Slack-Retry-Num: {retry_num}).")
         return
 
     # Extract necessary information based on event type
@@ -81,7 +83,7 @@ def process_slack_event_lazily(body, say, client):
     thread_ts = event_data.get("thread_ts", event_data.get("ts"))
 
     if not user_text_raw:
-        chatbot_logger.info("Received empty message or event without text.")
+        logger.info("Received empty message or event without text.")
         return
 
     print(
@@ -105,9 +107,9 @@ def process_slack_event_lazily(body, say, client):
             conversation_history = convert_to_langchain_messages(
                 messages, os.environ.get("SLACK_BOT_ID")
             )
-            chatbot_logger.info(f"Conversation history fetched: {conversation_history}")
+            logger.info(f"Conversation history fetched: {conversation_history}")
         except Exception as e:
-            chatbot_logger.error(
+            logger.error(
                 f"Error fetching conversation history: {e}", exc_info=True
             )
             # Continue without history if there's an error
@@ -125,10 +127,10 @@ def process_slack_event_lazily(body, say, client):
         user_text_query = user_text_raw.replace(f"<@{bot_id}>", "").strip()
 
         if not user_text_query:
-            chatbot_logger.info("Received empty message after removing bot mention.")
+            logger.info("Received empty message after removing bot mention.")
             return  # Do nothing for empty messages
 
-        chatbot_logger.info(f"User query for Bedrock: {user_text_query}")
+        logger.info(f"User query for Bedrock: {user_text_query}")
 
         # Post the response back to Slack
         say(text=response_text, thread_ts=thread_ts)
@@ -139,7 +141,7 @@ def process_slack_event_lazily(body, say, client):
             say(text=f"*Sources: *\n{sources_text}", thread_ts=thread_ts)
 
     except Exception as e:
-        chatbot_logger.error(
+        logger.error(
             f"Error processing message with Bedrock: {e}", exc_info=True
         )
         say(f"An error occurred while processing your request: {e}")
