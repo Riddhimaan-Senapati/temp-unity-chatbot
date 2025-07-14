@@ -1,6 +1,10 @@
 import logging
 import os
 import json
+import sys # Added sys import back
+
+# Explicitly add the current directory to Python path to ensure bundled modules are found
+sys.path.insert(0, os.path.dirname(__file__))
 
 from slack_bolt import App
 from slack_bolt.adapter.aws_lambda import SlackRequestHandler
