@@ -532,7 +532,7 @@ def handler(event, context):
     logger.info(f"Lambda invoked! Event: {json.dumps(event, default=str)}")
 
     # Check for Slack URL verification challenge
-    if "challenge" in event.get("body", ""): # check for challenge in event body
+    if "challenge" in event.get("body", ""):
         try:
             body = json.loads(event["body"]) if isinstance(event["body"], str) else event["body"]
             if "challenge" in body:
@@ -544,23 +544,29 @@ def handler(event, context):
             return {"statusCode": 500, "body": "Error handling challenge."}
 
     # Check if this is an asynchronous invocation (from a previous Lambda invocation)
-    if event.get("source") == "lambda" and event.get("detail-type") == "Scheduled Event": # This will be changed to a custom marker for self-invocation
+    if event.get("x-slack-async-invoke"):
         logger.info("Asynchronous invocation detected. Processing event.")
         # Process the actual Slack event
-        slack_event_payload = json.loads(event["detail"]["body"]) # Assuming the full Slack event is in detail.body
-        response = SlackRequestHandler(app).handle(slack_event_payload, context)
-        return response
+        # The event passed to SlackRequestHandler.handle should be the original API Gateway event format
+        # So we need to reconstruct it from the 'original_event' payload.
+        original_event = event.get("original_event")
+        if original_event:
+            response = SlackRequestHandler(app).handle(original_event, context)
+            return response
+        else:
+            logger.error("Asynchronous invocation received without original_event payload.")
+            return {"statusCode": 500, "body": "Missing original event payload for async processing."}
 
     # This is the initial API Gateway invocation from Slack.
     # Immediately acknowledge to Slack to avoid retries due to cold starts.
     print("Initial Slack invocation received. Acknowledging immediately and invoking asynchronously.")
     lambda_client = boto3.client("lambda", region_name=os.environ.get("AWS_REGION", "us-east-1"))
     try:
+        # Pass the original event and a flag to indicate asynchronous invocation
         lambda_client.invoke(
             FunctionName=context.function_name,
             InvocationType="Event",  # Asynchronous invocation
-            Payload=json.dumps({"source": "lambda", "detail-type": "Scheduled Event", "detail": {"body": event.get("body")}})
-            # We'll refine the payload for self-invocation detection
+            Payload=json.dumps({"x-slack-async-invoke": True, "original_event": event})
         )
         return {"statusCode": 200, "body": ""}  # Respond quickly to Slack
     except Exception as e:
