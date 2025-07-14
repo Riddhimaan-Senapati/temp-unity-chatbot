@@ -20,13 +20,13 @@ def initialize_bedrock_client():
     region = os.getenv("AWS_REGION", "us-east-1")
     print(f"Initializing Bedrock client in region: {region}")
     print(f"AWS_ACCESS_KEY_ID exists: {bool(os.getenv('AWS_ACCESS_KEY_ID'))}")
-    
+
     # Lambda environment - always use IAM role
     client = boto3.client(
         service_name="bedrock-runtime",
         region_name=region,
     )
-    print(f"Bedrock client initialized successfully")
+    print("Bedrock client initialized successfully")
     return client
 
 
