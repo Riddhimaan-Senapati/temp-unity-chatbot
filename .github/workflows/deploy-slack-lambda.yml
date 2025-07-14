@@ -142,12 +142,19 @@ jobs:
 
       - name: Create Lambda deployment package
         run: |
+          rm -rf lambda-package # Explicitly remove the directory
           mkdir -p lambda-package
           cp slack_lambda/slack_lambda.py lambda-package/
           cp -r utils lambda-package/
           cd lambda-package
-          # Only install essential Slack dependencies
-          pip install -r ../slack_lambda/slack_lambda_requirements.txt -t . --no-cache-dir
+          # Install dependencies from requirements.txt, ensuring upgrade and no caching
+          pip install -r ../slack_lambda/slack_lambda_requirements.txt -t . --no-cache-dir --upgrade
+          # --- DEBUG STEP: Verify slack-bolt version and package contents ---
+          echo "Contents of lambda-package after pip install:"
+          ls -lR .
+          echo "Checking slack-bolt version:"
+          python -c "import slack_bolt; print(slack_bolt.__version__)" || echo "slack_bolt not found or version check failed"
+          # --- END DEBUG STEP ---
           # Remove unnecessary files
           find . -type d -name "__pycache__" -exec rm -rf {} + 2>/dev/null || true
           find . -name "*.pyc" -delete 2>/dev/null || true
