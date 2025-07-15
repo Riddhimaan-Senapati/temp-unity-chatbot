@@ -1,214 +1,222 @@
+# filename: slack_lambda/slack_lambda.py
+
 import logging
 import os
+import base64
+import requests
 import json
-import boto3
 
-from langchain_core.messages import AIMessage, HumanMessage, SystemMessage # Added Langchain message types
+from dotenv import load_dotenv
+from langchain_core.messages import AIMessage, HumanMessage, SystemMessage
 from slack_bolt import App
 from slack_bolt.adapter.aws_lambda import SlackRequestHandler
 
-# Re-added Bedrock and related imports
+# Import your existing helper functions
 from utils.chatbot_helper import (
+    initialize_bedrock_client,
+    initialize_knowledge_base_retriever,
     initialize_llm,
-    initialize_knowledge_base_retriever
+    retrieve_context,
 )
+from utils.prompts import question_system_prompt, slack_system_prompt
 
-# Initialize a logger for this module
+# Load Environment Variables for local testing if needed
+load_dotenv()
+
+# --- Logging Setup for Lambda ---
+# Bolt's Lambda handler configures logging, but we can set a format.
+SlackRequestHandler.clear_all_log_handlers()
+logging.basicConfig(format="%(asctime)s %(name)s %(levelname)s %(message)s", level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-# Define convert_to_langchain_messages locally
-def convert_to_langchain_messages(slack_messages, bot_user_id):
-    langchain_messages = []
-    for msg in slack_messages:
-        # Skip bot messages that are not responses from our bot (e.g., app mention itself)
-        if msg.get("bot_id") and msg.get("bot_id") != bot_user_id:
-            continue
+# --- App Initialization for Lambda ---
+# process_before_response=True is CRITICAL for FaaS environments like Lambda.
+# It makes Bolt acknowledge requests from Slack within 3 seconds.
+app = App(
+    process_before_response=True,
+    signing_secret=os.environ.get("SLACK_SIGNING_SECRET"),
+)
 
-        text = msg.get("text", "").strip()
-        if not text:
-            continue
-
-        # Determine sender and message type
-        if msg.get("user") == bot_user_id or msg.get("bot_id") == bot_user_id:
-            # Message from the bot
-            langchain_messages.append(AIMessage(content=text))
-        else:
-            # Message from a user
-            langchain_messages.append(HumanMessage(content=text))
-    return langchain_messages
-
-# Initialize global variables for Bedrock client, LLM, and retriever
+# --- Global Clients for Lambda Lifecycle ---
+# These are initialized once per "cold start" of the Lambda container and reused.
 bedrock_client = None
 llm = None
 retriever = None
 
-# process_before_response must be True when running on FaaS
-app = App(
-    token=os.environ.get("SLACK_BOT_TOKEN"),
-    signing_secret=os.environ.get("SLACK_SIGNING_SECRET"),
-    # Set to False because we will manually handle async invocation for events
-    process_before_response=False,  # Changed to False for manual async handling
-)
-
-
-# New lazy function to process Slack events asynchronously
-def process_slack_event_lazily(body, say, client):
+def initialize_clients():
+    """Initializes AWS and LangChain clients if they haven't been already."""
     global bedrock_client, llm, retriever
-
-    # Initialize Bedrock client, LLM, and retriever if not already initialized (cold start)
     if bedrock_client is None:
         try:
-            print("Initializing Bedrock client, LLM, and retriever...")
-            # Changed to bedrock-agent-runtime as used in chatbot_helper
-            bedrock_client = boto3.client("bedrock-agent-runtime", region_name='us-east-1') 
-            llm = initialize_llm(bedrock_client)
-            retriever = initialize_knowledge_base_retriever() # Use initialize_knowledge_base_retriever function
-            print("Initialization complete.")
+            logger.info("Cold start: Initializing Bedrock client, LLM, and retriever...")
+            bedrock_client = initialize_bedrock_client()
+            llm = initialize_llm(client=bedrock_client)
+            retriever = initialize_knowledge_base_retriever()
+            logger.info("Initialization complete.")
         except Exception as e:
-            logger.error(f"Error during Bedrock client/LLM/retriever initialization: {e}", exc_info=True)
-            say(f"Error initializing bot components: {e}")
-            return
+            logger.critical(f"FATAL: Could not initialize Bedrock/LangChain clients: {e}", exc_info=True)
+            raise e # Fail loudly so the Lambda execution shows an error
 
-    # Only process if the message is new and not a retry from Slack
-    retry_num = body.get("X-Slack-Retry-Num")
-    if retry_num and int(retry_num) > 0:
-        logger.info(f"Ignoring retry event (X-Slack-Retry-Num: {retry_num}).")
+def reconstruct_history_from_slack(client, channel_id, thread_ts, bot_user_id):
+    """Reconstructs conversation history, now receiving bot_user_id as a parameter."""
+    history = [SystemMessage(content=slack_system_prompt)]
+    try:
+        result = client.conversations_replies(channel=channel_id, ts=thread_ts, limit=200)
+        messages = result.get("messages", [])
+        logger.info(f"Fetched {len(messages)} messages from Slack for thread {thread_ts}.")
+
+        for msg in sorted(messages, key=lambda x: float(x["ts"])):
+            msg_text = msg.get("text", "")
+            msg_bot_id = msg.get("bot_id")
+
+            if msg_bot_id or msg.get("user") == bot_user_id:
+                if msg_text: history.append(AIMessage(content=msg_text))
+            elif msg.get("user"):
+                message_content_parts = []
+                cleaned_text = msg_text.replace(f"<@{bot_user_id}>", "").strip() if msg["ts"] == thread_ts else msg_text
+                if cleaned_text: message_content_parts.append({"type": "text", "text": cleaned_text})
+
+                if msg.get("files"):
+                    for file in msg.get("files", []):
+                        if file.get("mimetype") in ["image/jpeg", "image/png", "image/gif", "image/webp"]:
+                            url_private = file.get("url_private")
+                            if url_private:
+                                try:
+                                    response = requests.get(url_private, headers={"Authorization": f"Bearer {os.environ.get('SLACK_BOT_TOKEN')}"}, timeout=10)
+                                    response.raise_for_status()
+                                    base64_image = base64.b64encode(response.content).decode("utf-8")
+                                    message_content_parts.append({
+                                        "type": "image", "source": {"type": "base64", "media_type": file.get("mimetype"), "data": base64_image}
+                                    })
+                                    logger.info(f"Successfully processed historical image: {file.get('name')}")
+                                except Exception as img_e:
+                                    logger.error(f"Failed to download/process historical image {file.get('name')}: {img_e}")
+                if message_content_parts:
+                    history.append(HumanMessage(content=message_content_parts))
+    except Exception as e:
+        logger.error(f"Error reconstructing history from Slack for thread {thread_ts}: {e}", exc_info=True)
+        return [SystemMessage(content=slack_system_prompt)]
+    return history
+
+def process_and_respond(body, say, client, context, logger):
+    """
+    This function contains the long-running logic (RAG and LLM calls).
+    It's called by the lazy listener after the initial ack() has been sent.
+    """
+    logger.info("Lazy function 'process_and_respond' started.")
+    
+    initialize_clients()
+    if not llm or not retriever:
+        say("The AI components are not available. Please contact an administrator.")
         return
 
-    # Extract necessary information based on event type
-    event_data = body.get("event", {})
-    user_text_raw = event_data.get("text", "No text found")
-    channel_id = event_data.get("channel", "")
-    user_id = event_data.get("user", "")
-    thread_ts = event_data.get("thread_ts", event_data.get("ts"))
+    event = body.get("event", {})
+    user_text_raw = event.get("text", "")
+    channel_id = event.get("channel")
+    thread_ts_for_history = event.get("thread_ts", event.get("ts"))
+    files = event.get("files", [])
+    bot_user_id = context.get("bot_user_id")
 
-    if not user_text_raw:
-        logger.info("Received empty message or event without text.")
+    if not bot_user_id:
+        say("An internal error occurred (E01: could not identify bot).")
         return
-
-    print(
-        f"Processing message from {user_id} in channel {channel_id}, thread {thread_ts}: {user_text_raw}"
-    )
-
-    # Conversation History for Context
-    conversation_history = []
-    if thread_ts and channel_id:
-        try:
-            # Fetch conversation history from Slack API
-            history = client.conversations_replies(
-                channel=channel_id,
-                ts=thread_ts,
-                inclusive=True,
-                latest=thread_ts,
-                limit=5,  # Limit to last 5 messages for context
-            )
-            messages = history["messages"]
-            # Convert Slack messages to LangChain messages
-            conversation_history = convert_to_langchain_messages(
-                messages, os.environ.get("SLACK_BOT_ID")
-            )
-            logger.info(f"Conversation history fetched: {conversation_history}")
-        except Exception as e:
-            logger.error(
-                f"Error fetching conversation history: {e}", exc_info=True
-            )
-            # Continue without history if there's an error
-            pass
 
     try:
-        # Generate response using BedrockAgent (assuming invoke now directly returns text and sources)
-        response_text, sources = llm.invoke(
-            conversation_history + [HumanMessage(content=user_text_query)],
-            config={'retriever': retriever} if retriever else None
-        ) # Modified invoke call to use correct Langchain format and pass retriever as config
+        current_thread_history = reconstruct_history_from_slack(client, channel_id, thread_ts_for_history, bot_user_id)
+        
+        def get_text_from_message(message):
+            if isinstance(message.content, str): return message.content
+            if isinstance(message.content, list): return " ".join([p["text"] for p in message.content if p["type"] == "text"])
+            return ""
 
-        # Remove bot mention from the user query
-        bot_id = os.environ.get("SLACK_BOT_ID")
-        user_text_query = user_text_raw.replace(f"<@{bot_id}>", "").strip()
+        text_only_history = [SystemMessage(content=question_system_prompt)]
+        if len(current_thread_history) > 1:
+            for msg in current_thread_history[1:]:
+                text_only_history.append(HumanMessage(content=get_text_from_message(msg)) if isinstance(msg, HumanMessage) else msg)
+        
+        cleaned_user_text = user_text_raw.replace(f"<@{bot_user_id}>", "").strip()
+        query_prompt_text = cleaned_user_text or ("Describe the attached image(s)." if files else "help")
+        
+        messages_for_query_opt = text_only_history[:-1] + [HumanMessage(content=f'Generate a search query for: "{query_prompt_text}"')]
+        
+        query_response = llm.invoke(messages_for_query_opt)
+        optimized_query = query_response.content.strip() or query_prompt_text
+        logger.info(f"Generated optimized query: '{optimized_query}'")
 
-        if not user_text_query:
-            logger.info("Received empty message after removing bot mention.")
-            return  # Do nothing for empty messages
+        context, _ = retrieve_context(retriever=retriever, prompt=optimized_query)
 
-        logger.info(f"User query for Bedrock: {user_text_query}")
+        content_parts = []
+        augmented_text = f"Context:\n{context}\n\nQuestion: {cleaned_user_text}"
+        content_parts.append({"type": "text", "text": augmented_text})
+        
+        if files:
+            for file in files:
+                if file.get("mimetype") in ["image/jpeg", "image/png", "image/gif", "image/webp"]:
+                    try:
+                        response = requests.get(file["url_private"], headers={"Authorization": f"Bearer {context['bot_token']}"}, timeout=10)
+                        response.raise_for_status()
+                        b64_img = base64.b64encode(response.content).decode("utf-8")
+                        content_parts.append({"type": "image", "source": {"type": "base64", "media_type": file["mimetype"], "data": b64_img}})
+                        logger.info(f"Successfully processed attached image: {file.get('name')}")
+                    except Exception as img_e:
+                        logger.error(f"Failed to process attached image {file.get('name')}: {img_e}")
 
-        # Post the response back to Slack
-        say(text=response_text, thread_ts=thread_ts)
-
-        # Optionally, send sources as a follow-up message or attach to the main message
-        if sources:
-            sources_text = "\n".join([f"- {s}" for s in sources])
-            say(text=f"*Sources: *\n{sources_text}", thread_ts=thread_ts)
+        final_history = current_thread_history[:-1] + [HumanMessage(content=content_parts)]
+        
+        ai_response = llm.invoke(final_history)
+        ai_message_content = ai_response.content if hasattr(ai_response, 'content') else str(ai_response)
+        disclaimer = "\n\n* *Generative AI is experimental. Please verify answers using official documentation.*"
+        full_response = ai_message_content + disclaimer
+        
+        say(text=full_response, thread_ts=thread_ts_for_history)
+        logger.info(f"Successfully sent LLM response to thread {thread_ts_for_history}.")
 
     except Exception as e:
-        logger.error(
-            f"Error processing message with Bedrock: {e}", exc_info=True
-        )
-        say(f"An error occurred while processing your request: {e}")
+        logger.error(f"Error in lazy processing function: {e}", exc_info=True)
+        say(text=f"I'm sorry, an error occurred while processing your request.", thread_ts=thread_ts_for_history)
 
+# --- Event Handlers using the lazy=[] parameter ---
+# This is the simplest and most robust way to handle the 3-second timeout.
+# Bolt automatically calls ack() and then runs the functions in the lazy list.
 
-# Event Listener for App Mentions (New Conversations OR Mentions in existing threads)
-@app.event("app_mention")
-def handle_app_mention_events(body, ack, context):
-    ack()  # Acknowledge the event immediately
-    # Asynchronously invoke the Lambda for actual processing
-    lambda_client = boto3.client("lambda")
-    # Ensure the payload includes a flag for async invocation
-    payload = json.dumps({"x-slack-async-invoke": True, "body": body})
-    lambda_client.invoke(
-        FunctionName=context.invoked_function_arn.split(":")[
-            6
-        ],  # Get function name from ARN
-        InvocationType="Event",  # Asynchronous invocation
-        Payload=payload,
-    )
+@app.event("app_mention", lazy=[process_and_respond])
+def handle_app_mention_events(ack):
+    ack()
 
+# We need a middleware to filter out messages we don't want to process for the 'message' event.
+@app.use
+def filter_unwanted_messages(body, next):
+    event = body.get("event", {})
+    # This middleware runs for ALL events. We only want to filter 'message' events.
+    if event.get("type") == "message":
+        message = event
+        # Get bot_user_id from the authorization data in the event body
+        bot_user_id = body.get("authorizations", [{}])[0].get("user_id")
 
-# Event Listener for Messages (Follow-ups in Threads and DMs)
-@app.event("message")
-def handle_message_events(body, ack, context):
-    ack()  # Acknowledge the event immediately
-    # Asynchronously invoke the Lambda for actual processing
-    lambda_client = boto3.client("lambda")
-    # Ensure the payload includes a flag for async invocation
-    payload = json.dumps({"x-slack-async-invoke": True, "body": body})
-    lambda_client.invoke(
-        FunctionName=context.invoked_function_arn.split(":")[
-            6
-        ],  # Get function name from ARN
-        InvocationType="Event",  # Asynchronous invocation
-        Payload=payload,
-    )
+        # Conditions to ignore the message
+        is_bot_message = message.get("bot_id") is not None
+        is_subtype = message.get("subtype") is not None
+        is_mention = bot_user_id and f"<@{bot_user_id}>" in message.get("text", "")
+        is_not_dm = message.get("channel_type") != "im"
+        
+        # We only want to process DMs that are NOT mentions (as mentions are handled by app_mention)
+        if is_bot_message or is_subtype or is_mention or is_not_dm:
+            return # Stop processing, don't call next()
 
+    # For all other events (like app_mention), or for valid DMs, continue.
+    next()
 
-# Clear all existing log handlers and set up basic logging
-SlackRequestHandler.clear_all_log_handlers()
-logging.basicConfig(format="%(asctime)s %(message)s", level=logging.INFO)
+@app.event("message", lazy=[process_and_respond])
+def handle_message_events(ack):
+    # The middleware above has already filtered out unwanted messages.
+    # If the execution reaches here, it's a valid DM to process.
+    ack()
 
-
+# --- Lambda Handler Entrypoint ---
 def handler(event, context):
-    print(f"Lambda invoked! Event: {json.dumps(event, default=str)}")
-
-    # Check if this is an asynchronous self-invocation
-    if event.get("x-slack-async-invoke") and event.get("body"):
-        print("Detected asynchronous self-invocation. Processing event lazily.")
-        # Unpack the original event body and process it
-        original_body = event["body"]
-        slack_handler = SlackRequestHandler(app=app)
-        # Manually call the appropriate event handler or process directly
-        # For this simplified test, we'll directly call the lazy function
-        # In a real app, you might re-dispatch based on event type
-        process_slack_event_lazily(
-            original_body,
-            slack_handler.create_say_instance(original_body),
-            slack_handler.create_client_instance(),
-        )
-        return {"statusCode": 200, "body": "Lazy processing initiated."}
-    else:
-        print(
-            "Detected initial API Gateway invocation. Acknowledging Slack immediately."
-        )
-        # This is the initial invocation from API Gateway (Slack).
-        # Bolt will internally handle the acknowledgment for standard events.
-        slack_handler = SlackRequestHandler(app=app)
-        return slack_handler.handle(event, context)
+    """
+    Handles incoming requests from API Gateway.
+    """
+    logger.info("Lambda handler invoked")
+    slack_handler = SlackRequestHandler(app=app)
+    return slack_handler.handle(event, context)
