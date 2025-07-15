@@ -91,6 +91,12 @@ Parameters:
     Description: Slack App Token
     NoEcho: true
     
+  SlackSigningSecret:
+    Type: String
+    Default: ""
+    Description: Slack Signing Secret
+    NoEcho: true
+    
   AWSAccessKeyID:
     Type: String
     Default: ""
@@ -258,6 +264,8 @@ Resources:
               Value: !Ref SlackBotToken
             - Name: SLACK_APP_TOKEN
               Value: !Ref SlackAppToken
+            - Name: SLACK_SIGNING_SECRET
+              Value: !Ref SlackSigningSecret
 
   # ECS Service
   ECSService:
