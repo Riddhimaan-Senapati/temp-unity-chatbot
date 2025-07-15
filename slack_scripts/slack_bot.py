@@ -38,9 +38,21 @@ from utils.slackbot_helper import (
 # Load Environment Variables
 load_dotenv()
 
-# Initialize Logging
-logging.basicConfig(level=logging.INFO)
+# Initialize Logging with more detailed format for ECS
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+    handlers=[
+        logging.StreamHandler()  # Ensure logs go to stdout for ECS
+    ]
+)
 logger = logging.getLogger(__name__)
+
+# Log startup information
+logger.info("=== Unity Slack Bot Starting ===")
+logger.info(f"Python version: {sys.version}")
+logger.info(f"Working directory: {os.getcwd()}")
+logger.info("Checking environment variables...")
 
 # Slack App Initialization
 app = App(token=os.environ.get("SLACK_BOT_TOKEN"))
