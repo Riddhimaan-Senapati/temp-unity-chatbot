@@ -1,14 +1,5 @@
 import logging
 import os
-import sys
-
-# Add the parent directory to Python path for local development
-# This is needed when running directly with: python slack_scripts/slack_bot.py
-# Docker containers handle this with PYTHONPATH environment variable
-if __name__ == "__main__":
-    parent_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-    if parent_dir not in sys.path:
-        sys.path.insert(0, parent_dir)
 
 from dotenv import load_dotenv
 from langchain_core.messages import SystemMessage
