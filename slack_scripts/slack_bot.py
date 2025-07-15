@@ -1,10 +1,8 @@
 import logging
 import os
-import base64
-import requests
 
 from dotenv import load_dotenv
-from langchain_core.messages import AIMessage, HumanMessage, SystemMessage
+from langchain_core.messages import SystemMessage
 from slack_bolt import App
 from slack_bolt.adapter.socket_mode import SocketModeHandler
 
@@ -18,6 +16,14 @@ from utils.chatbot_helper import (
 from utils.prompts import (
     question_system_prompt,
     slack_system_prompt_with_followups as slack_system_prompt,
+)
+
+from utils.slackbot_helper import (
+    reconstruct_history_from_slack,
+    create_optimized_query,
+    create_multimodal_message,
+    generate_ai_response,
+    get_text_from_message,
 )
 
 # Load Environment Variables
@@ -63,106 +69,7 @@ except Exception as e:
     )
 
 
-# Function to Reconstruct Conversation History from Slack
-def reconstruct_history_from_slack(client, channel_id, thread_ts):
-    if not bot_user_id:
-        logger.error("Cannot reconstruct history: bot_user_id is not set.")
-        return [SystemMessage(content=slack_system_prompt)]
 
-    history = [SystemMessage(content=slack_system_prompt)]
-    try:
-        result = client.conversations_replies(
-            channel=channel_id, ts=thread_ts, limit=200
-        )
-        messages = result.get("messages", [])
-        logger.info(
-            f"Fetched {len(messages)} messages from Slack for thread {thread_ts}."
-        )
-
-        for msg in sorted(messages, key=lambda x: float(x["ts"])):
-            msg_text = msg.get("text", "")
-            msg_user = msg.get("user")
-            msg_bot_id = msg.get("bot_id")
-
-            if msg_bot_id == bot_id_from_auth or msg_user == bot_user_id:
-                if msg_text:
-                    history.append(AIMessage(content=msg_text))
-            elif msg_user:
-                # A HumanMessage can contain a list of content parts (text and images).
-                message_content_parts = []
-
-                # Part 1: Add the text content
-                cleaned_text = msg_text
-                if msg["ts"] == thread_ts:  # If it's the root message
-                    cleaned_text = msg_text.replace(f"<@{bot_user_id}>", "").strip()
-
-                if cleaned_text:
-                    message_content_parts.append({"type": "text", "text": cleaned_text})
-
-                # Part 2: Check for and add image content
-                if msg.get("files"):
-                    for file in msg.get("files", []):
-                        if file.get("mimetype") in [
-                            "image/jpeg",
-                            "image/png",
-                            "image/gif",
-                            "image/webp",
-                        ]:
-                            logger.info(
-                                f"Found image file in historical message {msg['ts']}: {file.get('name')}"
-                            )
-                            url_private = file.get("url_private")
-                            if url_private:
-                                try:
-                                    # Add a timeout to the request (e.g., 10 seconds)
-                                    timeout_seconds = 10
-                                    response = requests.get(
-                                        url_private,
-                                        headers={
-                                            "Authorization": f"Bearer {os.environ.get('SLACK_BOT_TOKEN')}"
-                                        },
-                                        timeout=timeout_seconds,
-                                    )
-                                    logger.info(
-                                        f"Image download status: {response.status_code}, size: {len(response.content)} bytes."
-                                    )
-                                    response.raise_for_status()  # This will raise an error for 4xx/5xx responses
-                                    base64_image = base64.b64encode(
-                                        response.content
-                                    ).decode("utf-8")
-
-                                    message_content_parts.append(
-                                        {
-                                            "type": "image",
-                                            "source": {
-                                                "type": "base64",
-                                                "media_type": file.get("mimetype"),
-                                                "data": base64_image,
-                                            },
-                                        }
-                                    )
-                                    logger.info(
-                                        f"Successfully processed historical image: {file.get('name')}"
-                                    )
-                                except Exception as img_e:
-                                    logger.error(
-                                        f"Failed to download/process historical image {file.get('name')}: {img_e}",
-                                        exc_info=True,
-                                    )
-
-                if message_content_parts:
-                    history.append(HumanMessage(content=message_content_parts))
-
-        logger.info(
-            f"Reconstructed history for thread {thread_ts} with {len(history) - 1} turns."
-        )
-    except Exception as e:
-        logger.error(
-            f"Error reconstructing history from Slack for thread {thread_ts}: {e}",
-            exc_info=True,
-        )
-        return [SystemMessage(content=slack_system_prompt)]
-    return history
 
 
 #  Shared Logic for Processing User Messages
@@ -177,30 +84,12 @@ def process_user_message_with_slack_history(
         f"Processing user message for thread {thread_ts_key}. Raw input: '{current_user_text_raw}', Files: {len(files) if files else 0}"
     )
 
+    # Reconstruct conversation history using shared helper
     current_thread_history = reconstruct_history_from_slack(
-        client, channel_id, thread_ts_key
+        client, channel_id, thread_ts_key, bot_user_id, bot_id_from_auth
     )
 
-    # Helper to extract text from multimodal messages for text-only processing
-    def get_text_from_message(message):
-        if isinstance(message.content, str):
-            return message.content
-        if isinstance(message.content, list):
-            return " ".join(
-                [part["text"] for part in message.content if part["type"] == "text"]
-            )
-        return ""
-
-    # For query optimization, use a text-only representation of the history.
-    text_only_history = [SystemMessage(content=question_system_prompt)]
-    if len(current_thread_history) > 1:  # If there's more than the system prompt
-        for msg in current_thread_history[1:]:  # Skip system prompt
-            text_only_history.append(
-                HumanMessage(content=get_text_from_message(msg))
-                if isinstance(msg, HumanMessage)
-                else msg
-            )
-
+    # Clean user text and determine query
     cleaned_current_user_text = (
         current_user_text_raw.replace(f"<@{bot_user_id}>", "").strip()
         if bot_user_id
@@ -219,29 +108,10 @@ def process_user_message_with_slack_history(
             "Describe the attached image(s) in the context of our documentation."
         )
 
-    # Construct messages for the query optimization LLM call
-    messages_for_query_optimization_llm = text_only_history[
-        :-1
-    ]  # History up to before the current turn
-    messages_for_query_optimization_llm.append(
-        HumanMessage(
-            content=f'Based on the conversation history (if any), generate an optimized search query for the following user question: "{query_prompt_text}"'
-        )
-    )
-
-    logger.debug(
-        f"Messages for query optimization LLM (thread {thread_ts_key}): {messages_for_query_optimization_llm}"
-    )
-
     try:
-        # Get the optimized query from the LLM based on text
-        query_response = llm.invoke(messages_for_query_optimization_llm)
-        optimized_query = query_response.content.strip()
-        logger.info(
-            f"Generated optimized query for thread {thread_ts_key}: '{optimized_query}'"
-        )
-        if not optimized_query:
-            optimized_query = query_prompt_text
+        # Create optimized query using shared helper
+        optimized_query = create_optimized_query(llm, current_thread_history, query_prompt_text)
+        logger.info(f"Generated optimized query for thread {thread_ts_key}: '{optimized_query}'")
 
         # Retrieve context from knowledge base
         context, relevant_docs = retrieve_context(
@@ -251,79 +121,11 @@ def process_user_message_with_slack_history(
             f"Retrieved context for thread {thread_ts_key} (first 100 chars): {str(context)[:100]}"
         )
 
-        # Construct the multimodal message for the current user's turn
-        current_turn_content_parts = []
-        if cleaned_current_user_text:
-            # The augmented prompt combines RAG context with the user's text
-            augmented_text_prompt = (
-                f"Context:\n{context}\n\nQuestion: {cleaned_current_user_text}"
-            )
-            current_turn_content_parts.append(
-                {"type": "text", "text": augmented_text_prompt}
-            )
-        else:  # If there was no text, we still want to provide the RAG context
-            augmented_text_prompt_for_image = f"Context:\n{context}\n\nUser question regarding the following image(s): Describe the image(s) and relate them to the provided context if possible."
-            current_turn_content_parts.append(
-                {"type": "text", "text": augmented_text_prompt_for_image}
-            )
-
-        # Process and add images from the current message
-        if files:
-            for file in files:
-                if file.get("mimetype") in [
-                    "image/jpeg",
-                    "image/png",
-                    "image/gif",
-                    "image/webp",
-                ]:
-                    logger.info(
-                        f"Processing image attached to current message: {file.get('name')}"
-                    )
-                    url_private = file.get("url_private")
-                    if url_private:
-                        try:
-                            # Add a timeout to the request (e.g., 10 seconds)
-                            timeout_seconds = 10
-                            response = requests.get(
-                                url_private,
-                                headers={
-                                    "Authorization": f"Bearer {os.environ.get('SLACK_BOT_TOKEN')}"
-                                },
-                                timeout=timeout_seconds,
-                            )
-                            logger.info(
-                                f"Image download status: {response.status_code}, size: {len(response.content)} bytes."
-                            )
-                            response.raise_for_status()  # This will raise an error for 4xx/5xx responses
-                            base64_image = base64.b64encode(response.content).decode(
-                                "utf-8"
-                            )
-                            current_turn_content_parts.append(
-                                {
-                                    "type": "image",
-                                    "source": {
-                                        "type": "base64",
-                                        "media_type": file.get("mimetype"),
-                                        "data": base64_image,
-                                    },
-                                }
-                            )
-                            logger.info(
-                                f"Successfully processed and encoded attached image: {file.get('name')}"
-                            )
-                        except Exception as img_e:
-                            logger.error(
-                                f"Failed to download or process attached image {file.get('name')}: {img_e}",
-                                exc_info=True,
-                            )
-
-        # The last message to be added to the history is a multimodal HumanMessage
-        current_turn_human_message = HumanMessage(content=current_turn_content_parts)
+        # Create multimodal message using shared helper
+        current_turn_human_message = create_multimodal_message(cleaned_current_user_text, context, files)
 
         # The final history for the main LLM is the history up to the last turn, plus the new multimodal message
-        final_history_for_main_llm = current_thread_history[:-1] + [
-            current_turn_human_message
-        ]
+        final_history_for_main_llm = current_thread_history[:-1] + [current_turn_human_message]
 
         logger.info(
             f"Sending to main LLM for thread {thread_ts_key}. Final history length: {len(final_history_for_main_llm)} messages."
@@ -332,13 +134,9 @@ def process_user_message_with_slack_history(
             f"Final history for main LLM (thread {thread_ts_key}): {final_history_for_main_llm}"
         )
 
-        ai_response = llm.invoke(final_history_for_main_llm)
-        ai_message_content = (
-            ai_response.content if hasattr(ai_response, "content") else str(ai_response)
-        )
-        disclaimer = "\n\n* *Generative AI is experimental. Please verify answers using official documentation.*"
-        full_response = ai_message_content + disclaimer
-        logger.info(f"LLM response for thread {thread_ts_key}: '{ai_message_content}'")
+        # Generate AI response using shared helper
+        full_response = generate_ai_response(llm, final_history_for_main_llm)
+        logger.info(f"LLM response for thread {thread_ts_key}: Generated successfully")
         return full_response
     except Exception as e:
         logger.error(
