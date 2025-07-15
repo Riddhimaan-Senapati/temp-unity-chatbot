@@ -31,8 +31,8 @@ jobs:
           echo "AWS_ACCOUNT_ID=$AWS_ACCOUNT_ID" >> $GITHUB_ENV
           echo "Using AWS Account ID: $AWS_ACCOUNT_ID"
       
-      - name: Create IAM role for Lambda
-        id: create_iam_role # Add an ID to this step to reference its outputs
+      - name: Create/Update IAM role for Lambda
+        id: iam_role
         run: |
           set -euxo pipefail # Enable debug and exit on error/unset variable/pipefail
           ROLE_NAME="unity-slack-lambda-role"
@@ -135,10 +135,9 @@ jobs:
           echo "Resolved ROLE_ARN: $ROLE_ARN_VALUE"
           echo "role_arn=$ROLE_ARN_VALUE" >> $GITHUB_OUTPUT # Set as step output
       
-      - name: Debug IAM Role Outputs
+      - name: Debug IAM Role Output
         run: |
-          echo "Outputs from create_iam_role step:"
-          echo "role_arn: ${{ steps.create_iam_role.outputs.role_arn }}"
+          echo "IAM Role ARN: ${{ steps.iam_role.outputs.role_arn }}"
 
       # --- NEW STEP: Build and Publish Lambda Layer ---
       - name: Build and Publish Dependencies Layer
@@ -198,6 +197,7 @@ jobs:
               S3_BUCKET_NAME=${{ secrets.S3_BUCKET_NAME }}
             }"
 
+          echo "Using ROLE_ARN: $ROLE_ARN"
           if ! aws lambda get-function --function-name "$FUNCTION_NAME" > /dev/null 2>&1; then
             echo "Creating new Lambda function with layer..."
             aws lambda create-function \
