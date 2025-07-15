@@ -153,7 +153,7 @@ def process_and_respond(body, say, client, context, logger):
             for file in files:
                 if file.get("mimetype") in ["image/jpeg", "image/png", "image/gif", "image/webp"]:
                     try:
-                        response = requests.get(file["url_private"], headers={"Authorization": f"Bearer {context['bot_token']}"}, timeout=10)
+                        response = requests.get(file["url_private"], headers={"Authorization": f"Bearer {os.environ.get('SLACK_BOT_TOKEN')}"}, timeout=10)
                         response.raise_for_status()
                         b64_img = base64.b64encode(response.content).decode("utf-8")
                         content_parts.append({"type": "image", "source": {"type": "base64", "media_type": file["mimetype"], "data": b64_img}})
