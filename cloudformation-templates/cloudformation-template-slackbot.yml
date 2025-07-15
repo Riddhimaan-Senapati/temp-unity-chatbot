@@ -1,108 +1,108 @@
-AWSTemplateFormatVersion: '2010-09-09'
-Description: 'CloudFormation template for Unity Slack Bot infrastructure'
+AWSTemplateFormatVersion: "2010-09-09"
+Description: "CloudFormation template for Unity Slack Bot infrastructure"
 
 Parameters:
   EnvironmentName:
     Type: String
     Default: "prod"
     Description: Environment name (e.g., dev, test, prod)
-    
+
   ProjectTag:
     Type: String
     Default: "ai4cw"
     Description: Project tag value for all resources
-    
+
   ECRRepositoryName:
     Type: String
     Default: "unity-slackbot"
     Description: Name of the ECR repository
-    
+
   ECSClusterName:
     Type: String
     Default: "unity-slackbot-cluster"
     Description: Name of the ECS cluster
-    
+
   ECSServiceName:
     Type: String
     Default: "unity-slackbot-service"
     Description: Name of the ECS service
-    
+
   TaskDefinitionFamily:
     Type: String
     Default: "unity-slackbot-task"
     Description: Family name for the task definition
-    
+
   ContainerName:
     Type: String
     Default: "unity-slackbot"
     Description: Name of the container
-    
+
   TaskCPU:
     Type: String
     Default: "256"
     Description: CPU units for the task
-    
+
   TaskMemory:
     Type: String
     Default: "512"
     Description: Memory for the task in MB
-    
+
   S3BucketName:
     Type: String
     Description: Name of the S3 bucket for documents
-    
+
   LogRetentionDays:
     Type: Number
     Default: 14
     Description: Number of days to retain CloudWatch logs
-    
+
   DesiredCount:
     Type: Number
     Default: 1
     Description: Desired count of tasks for the ECS service
-    
+
   KnowledgeBaseId:
     Type: String
     Description: ID of the AWS Bedrock Knowledge Base
-    
+
   S3FolderPrefix:
     Type: String
     Default: "documents/"
     Description: Folder prefix in the S3 bucket
-    
+
   UnityUsername:
     Type: String
     Description: Username for Unity authentication
-    
+
   UnityPassword:
     Type: String
     Description: Password for Unity authentication
     NoEcho: true
-    
+
   SlackBotToken:
     Type: String
     Default: ""
     Description: Slack Bot Token
     NoEcho: true
-    
+
   SlackAppToken:
     Type: String
     Default: ""
     Description: Slack App Token
     NoEcho: true
-    
+
   SlackSigningSecret:
     Type: String
     Default: ""
     Description: Slack Signing Secret
     NoEcho: true
-    
+
   AWSAccessKeyID:
     Type: String
     Default: ""
     Description: AWS Access Key ID
     NoEcho: true
-    
+
   AWSSecretAccessKey:
     Type: String
     Default: ""
@@ -127,7 +127,7 @@ Resources:
     Type: AWS::EC2::Subnet
     Properties:
       VpcId: !Ref VPC
-      AvailabilityZone: !Select [0, !GetAZs '']
+      AvailabilityZone: !Select [0, !GetAZs ""]
       CidrBlock: 10.1.3.0/24
       MapPublicIpOnLaunch: true
       Tags:
@@ -140,7 +140,7 @@ Resources:
     Type: AWS::EC2::Subnet
     Properties:
       VpcId: !Ref VPC
-      AvailabilityZone: !Select [1, !GetAZs '']
+      AvailabilityZone: !Select [1, !GetAZs ""]
       CidrBlock: 10.1.4.0/24
       MapPublicIpOnLaunch: true
       Tags:
@@ -295,7 +295,7 @@ Resources:
     Type: AWS::IAM::Role
     Properties:
       AssumeRolePolicyDocument:
-        Version: '2012-10-17'
+        Version: "2012-10-17"
         Statement:
           - Effect: Allow
             Principal:
@@ -312,7 +312,7 @@ Resources:
     Type: AWS::IAM::Role
     Properties:
       AssumeRolePolicyDocument:
-        Version: '2012-10-17'
+        Version: "2012-10-17"
         Statement:
           - Effect: Allow
             Principal:
@@ -326,7 +326,7 @@ Resources:
       Policies:
         - PolicyName: S3BucketAccess
           PolicyDocument:
-            Version: '2012-10-17'
+            Version: "2012-10-17"
             Statement:
               - Effect: Allow
                 Action:
@@ -339,7 +339,7 @@ Resources:
                   - !Sub "arn:aws:s3:::${S3BucketName}/*"
         - PolicyName: BedrockAccess
           PolicyDocument:
-            Version: '2012-10-17'
+            Version: "2012-10-17"
             Statement:
               - Effect: Allow
                 Action:
@@ -363,7 +363,7 @@ Outputs:
   ECSClusterName:
     Description: Name of the ECS Cluster
     Value: !Ref ECSCluster
-  
+
   ECSServiceName:
     Description: Name of the ECS Service
     Value: !Ref ECSService
