@@ -57,6 +57,18 @@ logger.info("Checking environment variables...")
 # Slack App Initialization
 app = App(token=os.environ.get("SLACK_BOT_TOKEN"))
 
+# Add middleware to log all incoming events for debugging
+@app.middleware
+def log_all_events(body, next):
+    logger.info(f"=== INCOMING EVENT ===")
+    logger.info(f"Event type: {body.get('event', {}).get('type', 'unknown')}")
+    logger.info(f"Event body keys: {list(body.keys())}")
+    if 'event' in body:
+        event = body['event']
+        logger.info(f"Event details: channel={event.get('channel')}, user={event.get('user')}, text='{event.get('text', '')[:100]}'")
+    logger.info(f"=== END EVENT LOG ===")
+    next()
+
 # LangChain Initializations
 try:
     # initialize bedrock client
