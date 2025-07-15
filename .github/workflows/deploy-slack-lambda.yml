@@ -139,7 +139,7 @@ jobs:
         run: |
           echo "IAM Role ARN: ${{ steps.iam_role.outputs.role_arn }}"
 
-      # --- NEW STEP: Build and Publish Lambda Layer ---
+      # --- STEP 1 (MODIFIED): Build and Publish Dependencies Layer ---
       - name: Build and Publish Dependencies Layer
         id: lambda_layer
         run: |
@@ -147,28 +147,27 @@ jobs:
           REQUIREMENTS_FILE="slack_lambda/slack_lambda_requirements.txt"
           
           # Create the directory structure that Lambda Layers expect
-          mkdir -p layer/python/lib/python3.12/site-packages
+          mkdir -p layer/python
           
           echo "Installing dependencies into layer directory..."
-          pip install -r $REQUIREMENTS_FILE -t ./layer/python/lib/python3.12/site-packages
+          pip install -r $REQUIREMENTS_FILE -t ./layer/python
           
-          # --- CRITICAL FIX: Remove boto3 and botocore from the layer package ---
-          # These libraries are already in the AWS Lambda runtime environment.
-          # Removing them is essential to get the layer size under the limit.
+          # CRITICAL FIX: Remove boto3 and botocore AFTER installation
+          # because they are pulled in by langchain-aws but already exist in the Lambda runtime.
           echo "Removing AWS SDKs (boto3, botocore) from the layer to reduce size..."
-          rm -rf ./layer/python/lib/python3.12/site-packages/boto3
-          rm -rf ./layer/python/lib/python3.12/site-packages/botocore
+          rm -rf ./layer/python/boto3
+          rm -rf ./layer/python/botocore
           echo "AWS SDKs removed."
-          # --- END CRITICAL FIX ---
           
           cd layer
+          echo "Zipping the layer contents..."
           zip -r ../layer.zip .
           cd ..
           
           echo "Publishing new layer version..."
           LAYER_VERSION_ARN=$(aws lambda publish-layer-version \
             --layer-name $LAYER_NAME \
-            --description "Dependencies for the Unity Slack Bot" \
+            --description "Dependencies for the Unity Slack Bot (excluding Boto3)" \
             --zip-file fileb://layer.zip \
             --compatible-runtimes python3.12 \
             --query 'LayerVersionArn' --output text)
@@ -176,25 +175,18 @@ jobs:
           echo "Published Layer ARN: $LAYER_VERSION_ARN"
           echo "layer_arn=$LAYER_VERSION_ARN" >> $GITHUB_OUTPUT
 
-      - name: Create Lambda deployment package
+      # --- STEP 2 (MODIFIED): Create a SMALL Lambda package with ONLY your code ---
+      - name: Create Lambda deployment package (Application Code Only)
         run: |
-          REQUIREMENTS_FILE="slack_lambda/slack_lambda_requirements.txt"
-          
-          # 1. Create a clean package directory
-          mkdir -p package
-
-          # 2. Install all dependencies from your requirements file directly into the package directory
-          pip install --target ./package -r $REQUIREMENTS_FILE
-
-          # 3. Copy your application source code into the SAME package directory
-          # This copies the handler file to the root of the package
-          cp slack_lambda/slack_lambda.py ./package/
-          # This copies the entire utils directory into the root of the package
-          cp -r utils ./package/
-
-          # 4. Create the zip file from the contents of the package directory
-          cd package
+          echo "Creating zip file with only application code..."
+          # This zip should only contain slack_lambda.py and the utils directory
+          # To ensure the handler is found at `slack_lambda.handler`, we need `slack_lambda.py` at the root.
+          mkdir -p app_package
+          cp slack_lambda/slack_lambda.py ./app_package/
+          cp -r utils ./app_package/
+          cd app_package
           zip -r ../lambda-deployment-package.zip .
+          cd ..
 
       - name: Deploy Lambda function
         run: |
