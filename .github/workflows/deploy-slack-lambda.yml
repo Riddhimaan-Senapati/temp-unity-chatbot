@@ -142,46 +142,29 @@ jobs:
 
       - name: Create Lambda deployment package
         run: |
-          rm -rf lambda-package # Explicitly remove the main deployment directory
-          mkdir -p lambda-package
+          # This simplified packaging process is more robust for Lambda.
+          # It installs dependencies and copies source code into a single directory.
+          REQUIREMENTS_FILE="slack_lambda/slack_lambda_requirements.txt"
           
-          # Create a temporary directory for dependency installation
-          mkdir -p temp_lib
-          # Install dependencies into the temporary directory
-          pip install -r slack_lambda/slack_lambda_requirements.txt -t temp_lib --no-cache-dir --upgrade --force-reinstall
+          if [ ! -f $REQUIREMENTS_FILE ]; then
+              echo "ERROR: Requirements file not found at $REQUIREMENTS_FILE"
+              exit 1
+          fi
 
-          # Copy everything from temp_lib to lambda-package (flattening dependencies)
-          cp -r temp_lib/* lambda-package/
-          
-          # Copy slack_lambda.py and utils directory to the root of the deployment package
-          cp slack_lambda/slack_lambda.py lambda-package/
-          cp -r utils lambda-package/
-          
-          # Change to lambda-package for zipping and further debug
-          cd lambda-package
-          # --- DEBUG STEP: Verify slack-bolt version and package contents ---
-          echo "Contents of lambda-package after pip install and flattening:"
-          ls -lR .
-          echo "Checking slack-bolt version:"
-          # More robust check: list content of slack_bolt directory and try importing its init file
-          echo "Contents of slack_bolt installation directory:"
-          ls -lR ./slack_bolt || echo "slack_bolt directory not found"
-          echo "Attempting verbose import of slack_bolt:"
-          python -c "import sys; sys.path.insert(0, '.'); import slack_bolt; print('Successfully imported slack_bolt'); print(f'slack_bolt.__file__: {slack_bolt.__file__}'); print(f'slack_bolt.__path__: {slack_bolt.__path__}'); print(f'slack_bolt.__version__: {slack_bolt.__version__}')" > /tmp/slack_bolt_debug.txt 2>&1 || echo "Verbose slack_bolt import failed (see /tmp/slack_bolt_debug.txt for details)"
-          cat /tmp/slack_bolt_debug.txt || true # Print content of temp file
-          rm -f /tmp/slack_bolt_debug.txt || true # Clean up temp file
-          echo "Contents of slack_bolt/__init__.py:"
-          cat ./slack_bolt/__init__.py || echo "slack_bolt/__init__ .py not found or readable"
-          echo "Contents of slack_bolt/version.py:" # Add debug for version.py
-          cat ./slack_bolt/version.py || echo "slack_bolt/version.py not found or readable"
-          # --- END DEBUG STEP ---
-          # Remove unnecessary files
-          find . -type d -name "__pycache__" -exec rm -rf {} + 2>/dev/null || true
-          find . -name "*.pyc" -delete 2>/dev/null || true
-          find . -name "test*" -type d -exec rm -rf {} + 2>/dev/null || true
-          # Remove the temporary lib directory before zipping
-          rm -rf ../temp_lib || true
-          zip -r ../unity-slack-lambda.zip . -x "*.pyc" "*/__pycache__/*"
+          # 1. Create a clean package directory
+          rm -rf package
+          mkdir -p package
+
+          # 2. Install all dependencies from your requirements file directly into the package directory
+          pip install --target ./package -r $REQUIREMENTS_FILE
+
+          # 3. Copy your application code into the same package directory
+          cp slack_lambda/slack_lambda.py ./package/
+          cp -r utils ./package/
+
+          # 4. Create the zip file from the contents of the package directory
+          cd package
+          zip -r ../lambda-deployment-package.zip .
       
       - name: Deploy Lambda function
         run: |
@@ -192,7 +175,7 @@ jobs:
             echo "Updating existing Lambda function..."
             aws lambda update-function-code \
               --function-name $FUNCTION_NAME \
-              --zip-file fileb://unity-slack-lambda.zip
+              --zip-file fileb://lambda-deployment-package.zip
             
             echo "Waiting for function update to complete..."
             aws lambda wait function-updated --function-name $FUNCTION_NAME
@@ -217,7 +200,7 @@ jobs:
               --runtime python3.12 \
               --role $ROLE_ARN \
               --handler slack_lambda.handler \
-              --zip-file fileb://unity-slack-lambda.zip \
+              --zip-file fileb://lambda-deployment-package.zip \
               --timeout 300 \
               --memory-size 1024 \
               --environment Variables="{
