@@ -153,6 +153,15 @@ jobs:
           echo "Installing dependencies into layer directory..."
           pip install -r $REQUIREMENTS_FILE -t ./layer/python/lib/python3.12/site-packages
           
+          # --- CRITICAL FIX: Remove boto3 and botocore from the layer package ---
+          # These libraries are already in the AWS Lambda runtime environment.
+          # Removing them is essential to get the layer size under the limit.
+          echo "Removing AWS SDKs (boto3, botocore) from the layer to reduce size..."
+          rm -rf ./layer/python/lib/python3.12/site-packages/boto3
+          rm -rf ./layer/python/lib/python3.12/site-packages/botocore
+          echo "AWS SDKs removed."
+          # --- END CRITICAL FIX ---
+          
           cd layer
           zip -r ../layer.zip .
           cd ..
