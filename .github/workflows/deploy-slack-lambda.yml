@@ -140,79 +140,82 @@ jobs:
           echo "Outputs from create_iam_role step:"
           echo "role_arn: ${{ steps.create_iam_role.outputs.role_arn }}"
 
-      - name: Create Lambda deployment package
+      # --- NEW STEP: Build and Publish Lambda Layer ---
+      - name: Build and Publish Dependencies Layer
+        id: lambda_layer
         run: |
-          # This simplified packaging process is more robust for Lambda.
-          # It installs dependencies and copies source code into a single directory.
+          LAYER_NAME="unity-slackbot-dependencies"
           REQUIREMENTS_FILE="slack_lambda/slack_lambda_requirements.txt"
           
-          if [ ! -f $REQUIREMENTS_FILE ]; then
-              echo "ERROR: Requirements file not found at $REQUIREMENTS_FILE"
-              exit 1
-          fi
+          # Create the directory structure that Lambda Layers expect
+          mkdir -p layer/python/lib/python3.12/site-packages
+          
+          echo "Installing dependencies into layer directory..."
+          pip install -r $REQUIREMENTS_FILE -t ./layer/python/lib/python3.12/site-packages
+          
+          cd layer
+          zip -r ../layer.zip .
+          cd ..
+          
+          echo "Publishing new layer version..."
+          LAYER_VERSION_ARN=$(aws lambda publish-layer-version \
+            --layer-name $LAYER_NAME \
+            --description "Dependencies for the Unity Slack Bot" \
+            --zip-file fileb://layer.zip \
+            --compatible-runtimes python3.12 \
+            --query 'LayerVersionArn' --output text)
+          
+          echo "Published Layer ARN: $LAYER_VERSION_ARN"
+          echo "layer_arn=$LAYER_VERSION_ARN" >> $GITHUB_OUTPUT
 
-          # 1. Create a clean package directory
-          rm -rf package
-          mkdir -p package
+      # --- MODIFIED STEP: Create a SMALLER Lambda package ---
+      - name: Create Lambda deployment package (Application Code Only)
+        run: |
+          # This package will now ONLY contain your own code, making it very small.
+          zip -r lambda-deployment-package.zip slack_lambda/slack_lambda.py utils/ -x "*/__pycache__/*" "*.pyc"
 
-          # 2. Install all dependencies from your requirements file directly into the package directory
-          pip install --target ./package -r $REQUIREMENTS_FILE
-
-          # 3. Copy your application code into the same package directory
-          cp slack_lambda/slack_lambda.py ./package/
-          cp -r utils ./package/
-
-          # 4. Create the zip file from the contents of the package directory
-          cd package
-          zip -r ../lambda-deployment-package.zip .
-      
       - name: Deploy Lambda function
         run: |
           FUNCTION_NAME="unity-slack-lambda"
-          ROLE_ARN="arn:aws:iam::$AWS_ACCOUNT_ID:role/unity-slack-lambda-role"
+          ROLE_ARN="${{ steps.iam_role.outputs.role_arn }}"
+          # Get the Layer ARN from the previous step's output
+          LAYER_ARN="${{ steps.lambda_layer.outputs.layer_arn }}"
           
-          if aws lambda get-function --function-name $FUNCTION_NAME 2>/dev/null; then
-            echo "Updating existing Lambda function..."
-            aws lambda update-function-code \
-              --function-name $FUNCTION_NAME \
-              --zip-file fileb://lambda-deployment-package.zip
-            
-            echo "Waiting for function update to complete..."
-            aws lambda wait function-updated --function-name $FUNCTION_NAME
-            
-            aws lambda update-function-configuration \
-              --function-name $FUNCTION_NAME \
-              --timeout 300 \
-              --memory-size 1024 \
-              --environment Variables="{
-                SLACK_BOT_TOKEN=${{ secrets.SLACK_BOT_TOKEN }},
-                SLACK_SIGNING_SECRET=${{ secrets.SLACK_SIGNING_SECRET }},
-                KNOWLEDGE_BASE_ID=${{ secrets.KNOWLEDGE_BASE_ID }},
-                S3_BUCKET_NAME=${{ secrets.S3_BUCKET_NAME }},
-                S3_FOLDER_PREFIX=${{ secrets.S3_FOLDER_PREFIX }},
-                UNITY_USERNAME=${{ secrets.UNITY_USERNAME }},
-                UNITY_PASSWORD=${{ secrets.UNITY_PASSWORD }}
-              }"
-          else
-            echo "Creating new Lambda function..."
+          # Environment variables to set on the Lambda function
+          ENV_VARS="Variables={
+              SLACK_SIGNING_SECRET=${{ secrets.SLACK_SIGNING_SECRET }},
+              SLACK_BOT_TOKEN=${{ secrets.SLACK_BOT_TOKEN }},
+              KNOWLEDGE_BASE_ID=${{ secrets.KNOWLEDGE_BASE_ID }},
+              S3_BUCKET_NAME=${{ secrets.S3_BUCKET_NAME }}
+            }"
+
+          if ! aws lambda get-function --function-name "$FUNCTION_NAME" > /dev/null 2>&1; then
+            echo "Creating new Lambda function with layer..."
             aws lambda create-function \
-              --function-name $FUNCTION_NAME \
+              --function-name "$FUNCTION_NAME" \
               --runtime python3.12 \
-              --role $ROLE_ARN \
+              --role "$ROLE_ARN" \
               --handler slack_lambda.handler \
               --zip-file fileb://lambda-deployment-package.zip \
               --timeout 300 \
               --memory-size 1024 \
-              --environment Variables="{
-                SLACK_BOT_TOKEN=${{ secrets.SLACK_BOT_TOKEN }},
-                SLACK_SIGNING_SECRET=${{ secrets.SLACK_SIGNING_SECRET }},
-                KNOWLEDGE_BASE_ID=${{ secrets.KNOWLEDGE_BASE_ID }},
-                S3_BUCKET_NAME=${{ secrets.S3_BUCKET_NAME }},
-                S3_FOLDER_PREFIX=${{ secrets.S3_FOLDER_PREFIX }},
-                UNITY_USERNAME=${{ secrets.UNITY_USERNAME }},
-                UNITY_PASSWORD=${{ secrets.UNITY_PASSWORD }}
-              }" \
-              --tags PROJECT=ai4cw
+              --layers "$LAYER_ARN" \
+              --environment "$ENV_VARS"
+          else
+            echo "Updating existing Lambda function code..."
+            aws lambda update-function-code --function-name "$FUNCTION_NAME" --zip-file fileb://lambda-deployment-package.zip
+            
+            echo "Waiting for function code update to complete..."
+            aws lambda wait function-updated --function-name "$FUNCTION_NAME"
+
+            echo "Updating function configuration with new layer and env vars..."
+            aws lambda update-function-configuration \
+              --function-name "$FUNCTION_NAME" \
+              --role "$ROLE_ARN" \
+              --timeout 300 \
+              --memory-size 1024 \
+              --layers "$LAYER_ARN" \
+              --environment "$ENV_VARS"
           fi
       
       - name: Create API Gateway
