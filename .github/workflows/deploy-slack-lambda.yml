@@ -176,11 +176,25 @@ jobs:
           echo "Published Layer ARN: $LAYER_VERSION_ARN"
           echo "layer_arn=$LAYER_VERSION_ARN" >> $GITHUB_OUTPUT
 
-      # --- MODIFIED STEP: Create a SMALLER Lambda package ---
-      - name: Create Lambda deployment package (Application Code Only)
+      - name: Create Lambda deployment package
         run: |
-          # This package will now ONLY contain your own code, making it very small.
-          zip -r lambda-deployment-package.zip slack_lambda/slack_lambda.py utils/ -x "*/__pycache__/*" "*.pyc"
+          REQUIREMENTS_FILE="slack_lambda/slack_lambda_requirements.txt"
+          
+          # 1. Create a clean package directory
+          mkdir -p package
+
+          # 2. Install all dependencies from your requirements file directly into the package directory
+          pip install --target ./package -r $REQUIREMENTS_FILE
+
+          # 3. Copy your application source code into the SAME package directory
+          # This copies the handler file to the root of the package
+          cp slack_lambda/slack_lambda.py ./package/
+          # This copies the entire utils directory into the root of the package
+          cp -r utils ./package/
+
+          # 4. Create the zip file from the contents of the package directory
+          cd package
+          zip -r ../lambda-deployment-package.zip .
 
       - name: Deploy Lambda function
         run: |
