@@ -44,6 +44,7 @@ an AI-powered support system for Unity HPC(High Performance Computing) and AI Pl
 ![Data Pipeline Management](images/dashboard_data_pipeline_management.png "Management interface for documentation scraping pipeline")
 ![Slack Conversations Manager](images/dashboard_slack_conversations_management.png "Interface for viewing and editing Slack conversation data")
 ![Q&A Pairs Management](images/dashboard_qa_pairs_management.png "Management system for question-answer pairs generation")
+![Add Knowledge](images/dashboard_add_knowledge.png "Management tab for adding specific information or Q&A pair to the knowledge base manually")
 
 ### Slack Bot Integration
 ![Slack Bot Response](images/slack_bot_response.png "Slack bot providing helpful responses in team channels")

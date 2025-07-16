@@ -5,7 +5,7 @@ import os
 import base64
 import requests
 from langchain_core.messages import AIMessage, HumanMessage, SystemMessage
-from utils.prompts import question_system_prompt, slack_system_prompt
+from utils.prompts import question_system_prompt, slack_system_prompt_with_followups as slack_system_prompt
 
 logger = logging.getLogger(__name__)
 
@@ -40,28 +40,43 @@ def process_image_files(files, message_content_parts, context_type="historical")
     """Process image files and add them to message content parts."""
     if not files:
         return
-        
+
     for file in files:
-        if file.get("mimetype") in ["image/jpeg", "image/png", "image/gif", "image/webp"]:
-            logger.info(f"Found image file in {context_type} message: {file.get('name')}")
+        if file.get("mimetype") in [
+            "image/jpeg",
+            "image/png",
+            "image/gif",
+            "image/webp",
+        ]:
+            logger.info(
+                f"Found image file in {context_type} message: {file.get('name')}"
+            )
             url_private = file.get("url_private")
             if url_private:
                 try:
                     base64_image = download_and_encode_image(url_private)
-                    message_content_parts.append({
-                        "type": "image",
-                        "source": {
-                            "type": "base64",
-                            "media_type": file.get("mimetype"),
-                            "data": base64_image,
-                        },
-                    })
-                    logger.info(f"Successfully processed {context_type} image: {file.get('name')}")
+                    message_content_parts.append(
+                        {
+                            "type": "image",
+                            "source": {
+                                "type": "base64",
+                                "media_type": file.get("mimetype"),
+                                "data": base64_image,
+                            },
+                        }
+                    )
+                    logger.info(
+                        f"Successfully processed {context_type} image: {file.get('name')}"
+                    )
                 except Exception as img_e:
-                    logger.error(f"Failed to download/process {context_type} image {file.get('name')}: {img_e}")
+                    logger.error(
+                        f"Failed to download/process {context_type} image {file.get('name')}: {img_e}"
+                    )
 
 
-def reconstruct_history_from_slack(client, channel_id, thread_ts, bot_user_id, bot_id_from_auth=None):
+def reconstruct_history_from_slack(
+    client, channel_id, thread_ts, bot_user_id, bot_id_from_auth=None
+):
     """Reconstructs conversation history from Slack thread."""
     if not bot_user_id:
         logger.error("Cannot reconstruct history: bot_user_id is not set.")
@@ -69,9 +84,13 @@ def reconstruct_history_from_slack(client, channel_id, thread_ts, bot_user_id, b
 
     history = [SystemMessage(content=slack_system_prompt)]
     try:
-        result = client.conversations_replies(channel=channel_id, ts=thread_ts, limit=200)
+        result = client.conversations_replies(
+            channel=channel_id, ts=thread_ts, limit=200
+        )
         messages = result.get("messages", [])
-        logger.info(f"Fetched {len(messages)} messages from Slack for thread {thread_ts}.")
+        logger.info(
+            f"Fetched {len(messages)} messages from Slack for thread {thread_ts}."
+        )
 
         for msg in sorted(messages, key=lambda x: float(x["ts"])):
             msg_text = msg.get("text", "")
@@ -80,9 +99,7 @@ def reconstruct_history_from_slack(client, channel_id, thread_ts, bot_user_id, b
 
             # Check if this is a bot message
             is_bot_message = (
-                msg_bot_id == bot_id_from_auth or 
-                msg_bot_id or 
-                msg_user == bot_user_id
+                msg_bot_id == bot_id_from_auth or msg_bot_id or msg_user == bot_user_id
             )
 
             if is_bot_message:
@@ -101,14 +118,21 @@ def reconstruct_history_from_slack(client, channel_id, thread_ts, bot_user_id, b
                     message_content_parts.append({"type": "text", "text": cleaned_text})
 
                 # Part 2: Check for and add image content
-                process_image_files(msg.get("files", []), message_content_parts, "historical")
+                process_image_files(
+                    msg.get("files", []), message_content_parts, "historical"
+                )
 
                 if message_content_parts:
                     history.append(HumanMessage(content=message_content_parts))
 
-        logger.info(f"Reconstructed history for thread {thread_ts} with {len(history) - 1} turns.")
+        logger.info(
+            f"Reconstructed history for thread {thread_ts} with {len(history) - 1} turns."
+        )
     except Exception as e:
-        logger.error(f"Error reconstructing history from Slack for thread {thread_ts}: {e}", exc_info=True)
+        logger.error(
+            f"Error reconstructing history from Slack for thread {thread_ts}: {e}",
+            exc_info=True,
+        )
         return [SystemMessage(content=slack_system_prompt)]
     return history
 
@@ -126,7 +150,9 @@ def create_optimized_query(llm, current_thread_history, query_prompt_text):
             )
 
     # Construct messages for the query optimization LLM call
-    messages_for_query_optimization_llm = text_only_history[:-1]  # History up to before the current turn
+    messages_for_query_optimization_llm = text_only_history[
+        :-1
+    ]  # History up to before the current turn
     messages_for_query_optimization_llm.append(
         HumanMessage(
             content=f'Based on the conversation history (if any), generate an optimized search query for the following user question: "{query_prompt_text}"'
@@ -147,21 +173,25 @@ def create_optimized_query(llm, current_thread_history, query_prompt_text):
 def create_multimodal_message(cleaned_user_text, context, files):
     """Create a multimodal message with text and images."""
     current_turn_content_parts = []
-    
+
     if cleaned_user_text:
         # The augmented prompt combines RAG context with the user's text
         augmented_text_prompt = f"Context:\n{context}\n\nQuestion: {cleaned_user_text}"
-        current_turn_content_parts.append({"type": "text", "text": augmented_text_prompt})
+        current_turn_content_parts.append(
+            {"type": "text", "text": augmented_text_prompt}
+        )
     else:  # If there was no text, we still want to provide the RAG context
         augmented_text_prompt_for_image = (
             f"Context:\n{context}\n\n"
             "User question regarding the following image(s): Describe the image(s) and relate them to the provided context if possible."
         )
-        current_turn_content_parts.append({"type": "text", "text": augmented_text_prompt_for_image})
+        current_turn_content_parts.append(
+            {"type": "text", "text": augmented_text_prompt_for_image}
+        )
 
     # Process and add images from the current message
     process_image_files(files, current_turn_content_parts, "attached")
-    
+
     return HumanMessage(content=current_turn_content_parts)
 
 

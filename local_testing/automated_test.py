@@ -1,6 +1,11 @@
 import os
+import sys
 import json
 from dotenv import load_dotenv
+
+# Add parent directory to path for imports
+sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
 from utils.chatbot_helper import (
     initialize_bedrock_client,
     initialize_knowledge_base_retriever,
@@ -30,7 +35,9 @@ MODEL_PRICING = {
 
 
 # Load conversation threads from JSON file
-def load_conversation_threads(file_path="test_data/conversation_threads.json"):
+def load_conversation_threads(
+    file_path="local_testing/test_data/conversation_threads.json",
+):
     with open(file_path, "r", encoding="utf-8") as f:
         data = json.load(f)
     return data["threads"]
@@ -244,7 +251,7 @@ def test_model_on_database(model_name):
     summary["total_cost"] = round(summary["total_cost"], 6)
 
     # Create test_results directory if it doesn't exist
-    results_dir = os.path.join(os.getcwd(), "test_results")
+    results_dir = os.path.join(os.getcwd(), "local_testing", "test_results")
     os.makedirs(results_dir, exist_ok=True)
 
     # Create filename based on model name
@@ -546,7 +553,7 @@ def compare_models(thread_name):
             ]
 
     # Create test_results directory if it doesn't exist
-    results_dir = os.path.join(os.getcwd(), "test_results")
+    results_dir = os.path.join(os.getcwd(), "local_testing", "test_results")
     os.makedirs(results_dir, exist_ok=True)
 
     # Create filename based on thread name
@@ -936,7 +943,7 @@ def test_model_with_without_system_prompt(model_name, thread_name):
     )
 
     # Create test_results directory if it doesn't exist
-    results_dir = os.path.join(os.getcwd(), "test_results")
+    results_dir = os.path.join(os.getcwd(), "local_testing", "test_results")
     os.makedirs(results_dir, exist_ok=True)
 
     # Create filename
@@ -1075,10 +1082,10 @@ def system_prompt_comparison_json_to_markdown(json_file):
 ### Use test_model_with_without_system_prompt(model_name, thread_name) to test one model with/without system prompt
 if __name__ == "__main__":
     # Example: Test a single model on all conversation threads
-    # test_model_on_database("claude-3.5-haiku")
+    test_model_on_database("claude-4-sonnet")
 
     # Example: Test all models on a single thread
-    compare_models("Tricky GPU error driver update problem")
+    # compare_models("Tricky GPU error driver update problem")
 
     # Example: Test a specific model with and without system prompt on a chosen thread
     # test_model_with_without_system_prompt("claude-4-sonnet", "Unity basics")

@@ -95,6 +95,8 @@ def generate_qa_pairs(llm, conversation_text):
                                 ans.strip() for ans in answers if isinstance(ans, str)
                             )
                         ):
+                            # Add original conversation thread to each Q&A pair
+                            qa_pair["original_conversation"] = conversation_text
                             filtered_qa_pairs.append(qa_pair)
                         else:
                             logger.info(
@@ -230,6 +232,12 @@ def main():
         qa_pairs = generate_qa_pairs(llm, conversation)
 
         if qa_pairs:
+            # Add conversation metadata to each Q&A pair
+            for qa_pair in qa_pairs:
+                qa_pair["conversation_index"] = i
+                qa_pair["total_conversations"] = len(conversations)
+                qa_pair["generated_at"] = datetime.now().isoformat()
+
             all_qa_pairs.extend(qa_pairs)
             logger.info(f"Generated {len(qa_pairs)} Q&A pairs from conversation {i}")
         else:
@@ -262,6 +270,16 @@ def main():
                     print(f"A{i}: {answers[0][:100]}...")
                 else:
                     print(f"A{i}: No answers found")
+
+                # Show metadata
+                if qa.get("conversation_index"):
+                    print(f"Source: Conversation #{qa['conversation_index']}")
+                if qa.get("original_conversation"):
+                    original_preview = qa["original_conversation"][:150].replace(
+                        "\n", " "
+                    )
+                    print(f"Original conversation preview: {original_preview}...")
+                print("---")
 
             return True
         else:

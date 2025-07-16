@@ -172,7 +172,3 @@ cython_debug/
 
 # PyPI configuration file
 .pypirc
-
-#Example code
-aws_slack_lambda_example/
-slack_lambda_example/

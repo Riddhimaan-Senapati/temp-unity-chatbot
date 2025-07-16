@@ -2,8 +2,15 @@ import logging
 import os
 import sys
 
+# Add the parent directory to Python path for local development
+# This is needed when running directly with: python slack_scripts/slack_bot.py
+# Docker containers handle this with PYTHONPATH environment variable
+if __name__ == "__main__":
+    parent_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    if parent_dir not in sys.path:
+        sys.path.insert(0, parent_dir)
+
 from dotenv import load_dotenv
-from langchain_core.messages import SystemMessage
 from slack_bolt import App
 from slack_bolt.adapter.socket_mode import SocketModeHandler
 
@@ -24,7 +31,6 @@ from utils.slackbot_helper import (
     create_optimized_query,
     create_multimodal_message,
     generate_ai_response,
-    get_text_from_message,
 )
 
 # Load Environment Variables
@@ -33,10 +39,10 @@ load_dotenv()
 # Initialize Logging with more detailed format for ECS
 logging.basicConfig(
     level=logging.INFO,
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
     handlers=[
         logging.StreamHandler()  # Ensure logs go to stdout for ECS
-    ]
+    ],
 )
 logger = logging.getLogger(__name__)
 
@@ -49,17 +55,21 @@ logger.info("Checking environment variables...")
 # Slack App Initialization
 app = App(token=os.environ.get("SLACK_BOT_TOKEN"))
 
+
 # Add middleware to log all incoming events for debugging
 @app.middleware
 def log_all_events(body, next):
-    logger.info(f"=== INCOMING EVENT ===")
+    logger.info("=== INCOMING EVENT ===")
     logger.info(f"Event type: {body.get('event', {}).get('type', 'unknown')}")
     logger.info(f"Event body keys: {list(body.keys())}")
-    if 'event' in body:
-        event = body['event']
-        logger.info(f"Event details: channel={event.get('channel')}, user={event.get('user')}, text='{event.get('text', '')[:100]}'")
-    logger.info(f"=== END EVENT LOG ===")
+    if "event" in body:
+        event = body["event"]
+        logger.info(
+            f"Event details: channel={event.get('channel')}, user={event.get('user')}, text='{event.get('text', '')[:100]}'"
+        )
+    logger.info("=== END EVENT LOG ===")
     next()
+
 
 # LangChain Initializations
 try:
@@ -92,9 +102,6 @@ except Exception as e:
         f"Error fetching bot_user_id: {e}. Mention parsing and self-message filtering might be affected.",
         exc_info=True,
     )
-
-
-
 
 
 #  Shared Logic for Processing User Messages
@@ -135,8 +142,12 @@ def process_user_message_with_slack_history(
 
     try:
         # Create optimized query using shared helper
-        optimized_query = create_optimized_query(llm, current_thread_history, query_prompt_text)
-        logger.info(f"Generated optimized query for thread {thread_ts_key}: '{optimized_query}'")
+        optimized_query = create_optimized_query(
+            llm, current_thread_history, query_prompt_text
+        )
+        logger.info(
+            f"Generated optimized query for thread {thread_ts_key}: '{optimized_query}'"
+        )
 
         # Retrieve context from knowledge base
         context, relevant_docs = retrieve_context(
@@ -147,10 +158,14 @@ def process_user_message_with_slack_history(
         )
 
         # Create multimodal message using shared helper
-        current_turn_human_message = create_multimodal_message(cleaned_current_user_text, context, files)
+        current_turn_human_message = create_multimodal_message(
+            cleaned_current_user_text, context, files
+        )
 
         # The final history for the main LLM is the history up to the last turn, plus the new multimodal message
-        final_history_for_main_llm = current_thread_history[:-1] + [current_turn_human_message]
+        final_history_for_main_llm = current_thread_history[:-1] + [
+            current_turn_human_message
+        ]
 
         logger.info(
             f"Sending to main LLM for thread {thread_ts_key}. Final history length: {len(final_history_for_main_llm)} messages."
