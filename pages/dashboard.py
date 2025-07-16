@@ -103,12 +103,13 @@ if not st.session_state.logged_in:
     st.stop()
 
 # Create tabs for different dashboard sections
-tab1, tab2, tab3, tab4 = st.tabs(
+tab1, tab2, tab3, tab4, tab5 = st.tabs(
     [
         "User Feedback Analytics",
         "Data Pipeline Management",
         "Slack Conversations",
         "Q&A Pair Review",
+        "Add Knowledge",
     ]
 )
 
@@ -653,6 +654,24 @@ with tab4:
             st.session_state.current_qa_index = 0
 
         if st.session_state.qa_pairs:
+            # Check if this file has original conversations
+            has_original_conversations = False
+            if st.session_state.qa_pairs:
+                has_original_conversations = any(
+                    "original_conversation" in pair
+                    for pair in st.session_state.qa_pairs
+                )
+
+            # Display file info
+            if has_original_conversations:
+                st.success(
+                    "✅ This file includes original Slack conversations for review"
+                )
+            else:
+                st.info(
+                    "ℹ️ This file was generated before conversation tracking was implemented"
+                )
+
             # Display progress
             total_pairs = len(st.session_state.qa_pairs)
             current_index = st.session_state.current_qa_index
@@ -725,11 +744,67 @@ with tab4:
                         "question": edited_question,
                         "answers": edited_answers,
                     }
+                    # Preserve original conversation if it exists
+                    if "original_conversation" in current_pair:
+                        updated_pair["original_conversation"] = current_pair[
+                            "original_conversation"
+                        ]
+                    if "conversation_index" in current_pair:
+                        updated_pair["conversation_index"] = current_pair[
+                            "conversation_index"
+                        ]
+                    if "total_conversations" in current_pair:
+                        updated_pair["total_conversations"] = current_pair[
+                            "total_conversations"
+                        ]
+                    if "generated_at" in current_pair:
+                        updated_pair["generated_at"] = current_pair["generated_at"]
+
                     st.session_state.qa_pairs[current_index] = updated_pair
                     save_qa_file(
                         st.session_state.current_qa_file, st.session_state.qa_pairs
                     )
                     st.rerun()
+
+                # Original Conversation Expandable Section
+                original_conversation = current_pair.get("original_conversation")
+                if original_conversation:
+                    with st.expander(
+                        "📜 View Original Slack Conversation", expanded=False
+                    ):
+                        st.markdown("**Original Conversation Thread:**")
+
+                        # Add metadata if available
+                        conversation_metadata = []
+                        if "conversation_index" in current_pair:
+                            conversation_metadata.append(
+                                f"Conversation #{current_pair['conversation_index']}"
+                            )
+                        if "total_conversations" in current_pair:
+                            conversation_metadata.append(
+                                f"of {current_pair['total_conversations']} total"
+                            )
+                        if "generated_at" in current_pair:
+                            conversation_metadata.append(
+                                f"Generated: {current_pair['generated_at'][:19].replace('T', ' ')}"
+                            )
+
+                        if conversation_metadata:
+                            st.caption(" • ".join(conversation_metadata))
+
+                        # Display the conversation in a code block for better formatting
+                        st.text_area(
+                            "Conversation Content:",
+                            value=original_conversation,
+                            height=300,
+                            key=f"original_conversation_{current_index}",
+                            disabled=True,
+                            help="This is the original Slack conversation thread that was used to generate this Q&A pair",
+                        )
+                else:
+                    st.info(
+                        "ℹ️ Original conversation not available for this Q&A pair (generated before conversation tracking was implemented)"
+                    )
 
                 st.markdown("---")
 
@@ -747,6 +822,16 @@ with tab4:
                                 ans for ans in edited_answers if ans.strip()
                             ],  # Remove empty answers
                         }
+
+                        # Preserve original conversation and metadata
+                        for key in [
+                            "original_conversation",
+                            "conversation_index",
+                            "total_conversations",
+                            "generated_at",
+                        ]:
+                            if key in current_pair:
+                                updated_pair[key] = current_pair[key]
 
                         if updated_pair["question"].strip() and updated_pair["answers"]:
                             if approve_qa_pair(updated_pair):
@@ -774,6 +859,16 @@ with tab4:
                                 ans for ans in edited_answers if ans.strip()
                             ],  # Remove empty answers
                         }
+
+                        # Preserve original conversation and metadata
+                        for key in [
+                            "original_conversation",
+                            "conversation_index",
+                            "total_conversations",
+                            "generated_at",
+                        ]:
+                            if key in current_pair:
+                                updated_pair[key] = current_pair[key]
 
                         if updated_pair["question"].strip() and updated_pair["answers"]:
                             st.session_state.qa_pairs[current_index] = updated_pair
@@ -828,22 +923,564 @@ with tab4:
 
     st.markdown("---")
 
-    # Display approved pairs summary
-    with st.expander("📊 Approved Q&A Pairs Summary"):
-        approved_pairs = load_approved_qa_pairs()
-        if approved_pairs:
-            st.write(f"**Total Approved Pairs:** {len(approved_pairs)}")
+    # Display approved pairs management
+    st.subheader("📊 Approved Q&A Pairs Management")
+    approved_pairs = load_approved_qa_pairs()
+    if approved_pairs:
+        st.write(f"**Total Approved Pairs:** {len(approved_pairs)}")
 
-            # Show recent approvals
-            if len(approved_pairs) > 0:
-                st.write("**Recent Approvals:**")
-                for i, pair in enumerate(approved_pairs[-5:], 1):  # Show last 5
+        # Initialize session state for approved pairs navigation
+        if "current_approved_index" not in st.session_state:
+            st.session_state.current_approved_index = 0
+
+        # Ensure index is within bounds
+        if st.session_state.current_approved_index >= len(approved_pairs):
+            st.session_state.current_approved_index = max(0, len(approved_pairs) - 1)
+
+        # Control buttons and navigation
+        col1, col2, col3, col4, col5 = st.columns([1, 1, 1, 1, 2])
+
+        with col1:
+            if st.button("🔄 Refresh", key="refresh_approved"):
+                st.cache_data.clear()
+                st.rerun()
+
+        with col2:
+            # Previous button
+            if st.button(
+                "⬅️ Previous",
+                disabled=(st.session_state.current_approved_index == 0),
+                key="prev_approved",
+            ):
+                st.session_state.current_approved_index = max(
+                    0, st.session_state.current_approved_index - 1
+                )
+                st.rerun()
+
+        with col3:
+            # Next button
+            if st.button(
+                "➡️ Next",
+                disabled=(
+                    st.session_state.current_approved_index >= len(approved_pairs) - 1
+                ),
+                key="next_approved",
+            ):
+                st.session_state.current_approved_index = min(
+                    len(approved_pairs) - 1, st.session_state.current_approved_index + 1
+                )
+                st.rerun()
+
+        with col4:
+            # Jump to specific index
+            jump_to_index = st.number_input(
+                "Jump to:",
+                min_value=1,
+                max_value=len(approved_pairs),
+                value=st.session_state.current_approved_index + 1,
+                step=1,
+                key="jump_to_approved",
+                help="Enter a pair number to jump directly to it",
+            )
+
+        with col5:
+            if st.button("🎯 Go", key="jump_button_approved"):
+                st.session_state.current_approved_index = jump_to_index - 1
+                st.rerun()
+
+        # Search functionality
+        search_approved = st.text_input(
+            "🔍 Search approved pairs:",
+            placeholder="Search by question or answer...",
+            key="search_approved_pairs",
+        )
+
+        # Filter approved pairs based on search
+        filtered_pairs = approved_pairs
+        if search_approved:
+            search_lower = search_approved.lower()
+            filtered_pairs = [
+                pair
+                for pair in approved_pairs
+                if (
+                    search_lower in pair.get("question", "").lower()
+                    or search_lower in str(pair.get("answers", [])).lower()
+                    or search_lower in pair.get("answer", "").lower()
+                )
+            ]
+
+        st.markdown("---")
+
+        # Display current pair or search results
+        if search_approved:
+            # Show search results
+            if filtered_pairs:
+                st.write(f"**Search Results: {len(filtered_pairs)} pairs found**")
+
+                for i, pair in enumerate(filtered_pairs):
+                    # Find original index in the full list
+                    original_index = approved_pairs.index(pair)
+                    approved_at = pair.get("approved_at", "Unknown")
+                    source_file = pair.get("source_file", "Unknown")
+
+                    # Format approval date
+                    try:
+                        dt = datetime.datetime.fromisoformat(approved_at)
+                        approved_at_formatted = dt.strftime("%Y-%m-%d %H:%M")
+                    except:
+                        approved_at_formatted = approved_at
+
+                    # Create container for each search result
                     with st.container():
-                        st.write(
-                            f"**{len(approved_pairs) - 5 + i}.** {pair['question'][:100]}..."
+                        st.markdown(
+                            f"**#{original_index + 1} - {pair.get('question', 'No question')[:80]}...** *(Approved: {approved_at_formatted})*"
                         )
-                        st.write(f"*Approved: {pair.get('approved_at', 'Unknown')}*")
-                        if i < 5 and i < len(approved_pairs):
+
+                        col1, col2 = st.columns([4, 1])
+
+                        with col1:
+                            st.write("**Question:**")
+                            st.write(pair.get("question", "No question available"))
+
+                            # Handle both single answer and multiple answers format
+                            if "answers" in pair and isinstance(pair["answers"], list):
+                                st.write("**Answers:**")
+                                for j, answer in enumerate(pair["answers"]):
+                                    st.write(f"{j + 1}. {answer}")
+                            elif "answer" in pair:
+                                st.write("**Answer:**")
+                                st.write(pair.get("answer", "No answer available"))
+                            else:
+                                st.write("**Answer:** No answer available")
+
+                        with col2:
+                            st.write("**Metadata:**")
+                            st.write(f"Index: #{original_index + 1}")
+                            st.write(f"Approved: {approved_at_formatted}")
+                            if source_file != "Unknown":
+                                st.write(f"Source: {source_file.split('/')[-1]}")
+
+                            # Delete button for approved pairs (single click)
+                            if st.button(
+                                "🗑️ Delete",
+                                key=f"delete_approved_search_{original_index}",
+                                help="Delete this approved Q&A pair",
+                            ):
+                                # Remove the pair from approved list
+                                updated_approved = [
+                                    p
+                                    for j, p in enumerate(approved_pairs)
+                                    if j != original_index
+                                ]
+
+                                # Save updated approved pairs
+                                if save_approved_qa_pairs(updated_approved):
+                                    st.success(
+                                        "✅ Approved Q&A pair deleted successfully!"
+                                    )
+                                    st.cache_data.clear()
+                                    st.rerun()
+                                else:
+                                    st.error("❌ Failed to delete approved Q&A pair.")
+
+                        # Add separator between pairs (except for the last one)
+                        if i < len(filtered_pairs) - 1:
                             st.markdown("---")
+            else:
+                st.info("No approved pairs match your search criteria.")
         else:
-            st.info("No approved Q&A pairs yet.")
+            # Show single pair navigation
+            if approved_pairs:
+                current_index = st.session_state.current_approved_index
+                pair = approved_pairs[current_index]
+                approved_at = pair.get("approved_at", "Unknown")
+                source_file = pair.get("source_file", "Unknown")
+
+                # Progress indicator
+                st.progress((current_index + 1) / len(approved_pairs))
+                st.caption(f"Viewing pair {current_index + 1} of {len(approved_pairs)}")
+
+                # Format approval date
+                try:
+                    dt = datetime.datetime.fromisoformat(approved_at)
+                    approved_at_formatted = dt.strftime("%Y-%m-%d %H:%M")
+                except:
+                    approved_at_formatted = approved_at
+
+                # Create container for current pair
+                with st.container():
+                    st.markdown(
+                        f"**#{current_index + 1} - {pair.get('question', 'No question')[:80]}...** *(Approved: {approved_at_formatted})*"
+                    )
+
+                    col1, col2 = st.columns([4, 1])
+
+                    with col1:
+                        st.write("**Question:**")
+                        st.write(pair.get("question", "No question available"))
+
+                        # Handle both single answer and multiple answers format
+                        if "answers" in pair and isinstance(pair["answers"], list):
+                            st.write("**Answers:**")
+                            for j, answer in enumerate(pair["answers"]):
+                                st.write(f"{j + 1}. {answer}")
+                        elif "answer" in pair:
+                            st.write("**Answer:**")
+                            st.write(pair.get("answer", "No answer available"))
+                        else:
+                            st.write("**Answer:** No answer available")
+
+                    with col2:
+                        st.write("**Metadata:**")
+                        st.write(f"Index: #{current_index + 1}")
+                        st.write(f"Approved: {approved_at_formatted}")
+                        if source_file != "Unknown":
+                            st.write(f"Source: {source_file.split('/')[-1]}")
+
+                        # Delete button for approved pairs (single click)
+                        if st.button(
+                            "🗑️ Delete",
+                            key=f"delete_approved_{current_index}",
+                            help="Delete this approved Q&A pair",
+                        ):
+                            # Remove the pair from approved list
+                            updated_approved = [
+                                p
+                                for j, p in enumerate(approved_pairs)
+                                if j != current_index
+                            ]
+
+                            # Save updated approved pairs
+                            if save_approved_qa_pairs(updated_approved):
+                                st.success("✅ Approved Q&A pair deleted successfully!")
+                                # Adjust index if necessary
+                                if st.session_state.current_approved_index >= len(
+                                    updated_approved
+                                ):
+                                    st.session_state.current_approved_index = max(
+                                        0, len(updated_approved) - 1
+                                    )
+                                st.cache_data.clear()
+                                st.rerun()
+                            else:
+                                st.error("❌ Failed to delete approved Q&A pair.")
+            else:
+                st.info("No approved pairs to display.")
+    else:
+        st.info(
+            "No approved Q&A pairs yet. Approve some pairs from the review section above to see them here."
+        )
+
+with tab5:
+    st.header("📚 Add Knowledge")
+
+    # Initialize session state for knowledge input
+    if "knowledge_entries" not in st.session_state:
+        st.session_state.knowledge_entries = []
+
+    def load_knowledge_from_s3():
+        """Load knowledge entries from S3 JSON file"""
+        try:
+            s3 = boto3.client("s3")
+            s3_key = "manual_knowledge/knowledge_input.json"
+
+            response = s3.get_object(Bucket=S3_BUCKET_NAME, Key=s3_key)
+            content = response["Body"].read().decode("utf-8")
+            data = json.loads(content)
+
+            # Return the entries or empty list if structure is different
+            if isinstance(data, dict):
+                return data.get("entries", [])
+            elif isinstance(data, list):
+                return data
+            else:
+                return []
+
+        except ClientError as e:
+            if e.response["Error"]["Code"] == "NoSuchKey":
+                return []  # File doesn't exist yet
+            else:
+                st.error(f"Error loading knowledge from S3: {e}")
+                return []
+        except Exception as e:
+            st.error(f"Error loading knowledge: {e}")
+            return []
+
+    def save_knowledge_to_s3(entries):
+        """Save knowledge entries to S3 JSON file"""
+        try:
+            s3 = boto3.client("s3")
+            s3_key = "manual_knowledge/knowledge_input.json"
+
+            # Create structured data with metadata
+            data = {
+                "metadata": {
+                    "created_at": datetime.datetime.now().isoformat(),
+                    "total_entries": len(entries),
+                    "last_updated": datetime.datetime.now().isoformat(),
+                },
+                "entries": entries,
+            }
+
+            content = json.dumps(data, indent=2, ensure_ascii=False)
+
+            # Add S3 metadata
+            metadata = {
+                "content_type": "manual_knowledge",
+                "total_entries": str(len(entries)),
+                "last_updated": datetime.datetime.now().isoformat(),
+            }
+
+            s3.put_object(
+                Bucket=S3_BUCKET_NAME,
+                Key=s3_key,
+                Body=content,
+                ContentType="application/json",
+                Metadata=metadata,
+            )
+            return True
+        except Exception as e:
+            st.error(f"Error saving knowledge to S3: {e}")
+            return False
+
+    def add_knowledge_entry(entry_type, title, content, question=None, answer=None):
+        """Add a new knowledge entry"""
+        new_entry = {
+            "type": entry_type,
+            "title": title,
+            "created_at": datetime.datetime.now().isoformat(),
+        }
+
+        if entry_type == "qa_pair":
+            new_entry["question"] = question
+            new_entry["answer"] = answer
+        else:  # knowledge_input
+            new_entry["content"] = content
+
+        return new_entry
+
+    # Load existing knowledge entries on first load
+    @st.cache_data(ttl=300)  # Cache for 5 minutes
+    def get_cached_knowledge_entries():
+        return load_knowledge_from_s3()
+
+    # Control buttons
+    col1, col2 = st.columns(2)
+    with col1:
+        if st.button("🔄 Refresh Knowledge Entries", key="refresh_knowledge"):
+            st.cache_data.clear()
+            st.rerun()
+    with col2:
+        st.metric("Total Entries", len(get_cached_knowledge_entries()))
+
+    st.markdown("---")
+
+    # Knowledge input form
+    st.subheader("✍️ Add New Knowledge")
+
+    # Type selection
+    entry_type = st.radio(
+        "Select knowledge type:",
+        ["Q&A Pair", "Knowledge Input"],
+        key="knowledge_type",
+        help="Choose whether to add a question-answer pair or general knowledge content",
+    )
+
+    with st.form("knowledge_form", clear_on_submit=True):
+        # Common fields
+        title = st.text_input(
+            "Title/Summary:",
+            placeholder="Brief title or summary of this knowledge entry",
+            help="A short descriptive title for this knowledge entry",
+        )
+
+        if entry_type == "Q&A Pair":
+            question = st.text_area(
+                "Question:",
+                placeholder="Enter the question about Unity...",
+                height=80,
+                help="The question that users might ask",
+            )
+            answer = st.text_area(
+                "Answer:",
+                placeholder="Enter the answer or explanation...",
+                height=120,
+                help="The detailed answer or explanation",
+            )
+            content = None
+        else:  # Knowledge Input
+            content = st.text_area(
+                "Knowledge Content:",
+                placeholder="Enter general knowledge, documentation, or information about Unity...",
+                height=150,
+                help="General knowledge content, documentation, or information",
+            )
+            question = None
+            answer = None
+
+        # Submit button
+        submitted = st.form_submit_button("💾 Save Knowledge Entry", type="primary")
+
+        if submitted:
+            # Validation
+            if not title.strip():
+                st.error("Title is required!")
+            elif entry_type == "Q&A Pair" and (
+                not question.strip() or not answer.strip()
+            ):
+                st.error("Both question and answer are required for Q&A pairs!")
+            elif entry_type == "Knowledge Input" and not content.strip():
+                st.error("Knowledge content is required!")
+            else:
+                # Load current entries
+                current_entries = load_knowledge_from_s3()
+
+                # Create new entry
+                new_entry = add_knowledge_entry(
+                    entry_type.lower().replace(" ", "_"),
+                    title.strip(),
+                    content.strip() if content else None,
+                    question.strip() if question else None,
+                    answer.strip() if answer else None,
+                )
+
+                # Add to list
+                current_entries.append(new_entry)
+
+                # Save to S3
+                if save_knowledge_to_s3(current_entries):
+                    st.success(f"✅ {entry_type} saved successfully!")
+                    st.cache_data.clear()
+                    st.rerun()
+                else:
+                    st.error("❌ Failed to save knowledge entry.")
+
+    st.markdown("---")
+
+    # Display existing knowledge entries
+    st.subheader("📖 Existing Knowledge Entries")
+
+    knowledge_entries = get_cached_knowledge_entries()
+
+    if not knowledge_entries:
+        st.info("No knowledge entries found. Add your first entry above!")
+    else:
+        # Filter and search options
+        col1, col2 = st.columns([2, 1])
+        with col1:
+            search_term = st.text_input(
+                "🔍 Search knowledge base:",
+                placeholder="Search by title, question, or content...",
+                key="knowledge_search",
+            )
+        with col2:
+            filter_type = st.selectbox(
+                "Filter by type:",
+                ["All", "Q&A Pair", "Knowledge Input"],
+                key="knowledge_filter",
+            )
+
+        # Filter entries based on search and type
+        filtered_entries = knowledge_entries
+
+        if search_term:
+            search_lower = search_term.lower()
+            filtered_entries = [
+                entry
+                for entry in filtered_entries
+                if (
+                    search_lower in entry.get("title", "").lower()
+                    or search_lower in entry.get("question", "").lower()
+                    or search_lower in entry.get("answer", "").lower()
+                    or search_lower in entry.get("content", "").lower()
+                )
+            ]
+
+        if filter_type != "All":
+            filter_type_key = filter_type.lower().replace(" ", "_")
+            filtered_entries = [
+                entry
+                for entry in filtered_entries
+                if entry.get("type") == filter_type_key
+            ]
+
+        # Sort by creation date (newest first)
+        filtered_entries.sort(key=lambda x: x.get("created_at", ""), reverse=True)
+
+        st.write(f"Showing {len(filtered_entries)} of {len(knowledge_entries)} entries")
+
+        # Display entries in a container format
+        for i, entry in enumerate(filtered_entries):
+            entry_type_display = entry.get("type", "unknown").replace("_", " ").title()
+            created_at = entry.get("created_at", "Unknown")
+
+            # Format creation date
+            try:
+                dt = datetime.datetime.fromisoformat(created_at)
+                created_at_formatted = dt.strftime("%Y-%m-%d %H:%M")
+            except:
+                created_at_formatted = created_at
+
+            # Create container for each knowledge entry
+            with st.container():
+                st.markdown(
+                    f"**#{i + 1} - {entry.get('title', 'Untitled')}** *({entry_type_display}) - {created_at_formatted}*"
+                )
+
+                col1, col2 = st.columns([3, 1])
+
+                with col1:
+                    if entry.get("type") == "qa_pair":
+                        st.write("**Question:**")
+                        st.write(entry.get("question", ""))
+                        st.write("**Answer:**")
+                        st.write(entry.get("answer", ""))
+                    else:  # knowledge_input
+                        st.write("**Content:**")
+                        st.write(entry.get("content", ""))
+
+                with col2:
+                    st.write("**Metadata:**")
+                    st.write(f"Index: #{i + 1}")
+                    st.write(f"Type: {entry_type_display}")
+                    st.write(f"Created: {created_at_formatted}")
+
+                    # Delete button
+                    if st.button(
+                        "🗑️ Delete",
+                        key=f"delete_knowledge_{i}",
+                        help="Delete this knowledge entry",
+                    ):
+                        # Remove entry from list
+                        updated_entries = [
+                            e for j, e in enumerate(knowledge_entries) if j != i
+                        ]
+
+                        # Save updated list
+                        if save_knowledge_to_s3(updated_entries):
+                            st.success("✅ Entry deleted successfully!")
+                            st.cache_data.clear()
+                            st.rerun()
+                        else:
+                            st.error("❌ Failed to delete entry.")
+
+                # Add separator between entries (except for the last one)
+                if i < len(filtered_entries) - 1:
+                    st.markdown("---")
+
+        # Statistics summary
+        if knowledge_entries:
+            st.markdown("---")
+            col1, col2, col3 = st.columns(3)
+
+            qa_count = len([e for e in knowledge_entries if e.get("type") == "qa_pair"])
+            knowledge_count = len(
+                [e for e in knowledge_entries if e.get("type") == "knowledge_input"]
+            )
+
+            with col1:
+                st.metric("Total Entries", len(knowledge_entries))
+            with col2:
+                st.metric("Q&A Pairs", qa_count)
+            with col3:
+                st.metric("Knowledge Inputs", knowledge_count)
