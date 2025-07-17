@@ -13,9 +13,9 @@ load_dotenv()
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-BOT_TOKEN = os.getenv("SLACK_BOT_TOKEN")
+BOT_TOKEN = os.getenv("SCRAPPER_SLACK_BOT_TOKEN")
 if not BOT_TOKEN:
-    logger.critical("SLACK_BOT_TOKEN must be set")
+    logger.critical("SCRAPPER_SLACK_BOT_TOKEN must be set")
     exit(1)
 
 # The App object holds a client instance authenticated with the BOT_TOKEN.
