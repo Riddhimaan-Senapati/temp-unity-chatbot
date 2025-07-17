@@ -11,6 +11,7 @@ from utils.data_pipeline.scrape_and_upload_to_s3 import (
     scrape_and_upload_link,
 )
 from utils.feedback import display_feedback_dashboard
+from utils.streamlit_components import show_confirmation_dialog, confirm_action, trigger_confirmation
 from slack_scripts.slack_scraper import main as slack_scraper_main
 from qa_pairs.slack_qa_generator import main as slack_qa_main
 
@@ -249,6 +250,19 @@ with tab2:
         key="run_single_scraper_button",
         help="Scrapes the entered URL and uploads its content to S3.",
     ):
+        if single_url.strip():
+            trigger_confirmation("scrape_single_url")
+        else:
+            st.warning("Please enter a URL to scrape.")
+    
+    # Handle confirmation for single URL scraping
+    if confirm_action(
+        "scrape_single_url",
+        f"scrape the URL: {single_url}",
+        action_description=f"This will scrape the content from {single_url} and upload it to S3.",
+        warning_message="This action will consume API resources and may take some time to complete.",
+        danger_level="info"
+    ):
         run_single_url_scraper(single_url)
 
     st.markdown("---")
@@ -258,6 +272,16 @@ with tab2:
         "🚀 Scrape All Websites",
         key="run_scraper_button",
         help="Runs the scraping pipeline defined in datapipeline.py and uploads to S3.",
+    ):
+        trigger_confirmation("scrape_all_websites")
+    
+    # Handle confirmation for scraping all websites
+    if confirm_action(
+        "scrape_all_websites",
+        "scrape all websites",
+        action_description="This will run the complete scraping pipeline for all configured websites and upload the content to S3.",
+        warning_message="⚠️ This is a resource-intensive operation that may take a significant amount of time and consume API resources. Please ensure you want to proceed.",
+        danger_level="warning"
     ):
         run_scraper_and_refresh()
 
@@ -320,7 +344,17 @@ with tab3:
         st.write("")  # Add vertical space to align with date input
         st.write("")  # Add more vertical space if needed
         if st.button("📥 Scrape Slack Channel", key="scrape_slack"):
-            run_slack_scraper_and_refresh(start_date.strftime("%Y-%m-%d"))
+            trigger_confirmation("scrape_slack_channel")
+    
+    # Handle confirmation for Slack channel scraping
+    if confirm_action(
+        "scrape_slack_channel",
+        f"scrape the Slack channel from {start_date.strftime('%Y-%m-%d')}",
+        action_description=f"This will scrape all conversations from the Slack channel starting from {start_date.strftime('%Y-%m-%d')} and upload them to S3.",
+        warning_message="⚠️ This operation will access your Slack workspace and may take time depending on the amount of conversation data. Please ensure you want to proceed.",
+        danger_level="warning"
+    ):
+        run_slack_scraper_and_refresh(start_date.strftime("%Y-%m-%d"))
 
     def save_edited_markdown_to_s3(edited_content, original_metadata):
         """Save edited markdown content back to S3"""
