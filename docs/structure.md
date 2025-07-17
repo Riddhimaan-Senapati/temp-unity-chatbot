@@ -18,6 +18,7 @@
 ├── utils/
 │ ├── chatbot_helper.py
 │ ├── slackbot_helper.py
+│ ├── streamlit_components.py
 │ ├── feedback.py
 │ ├── prompts.py
 │ └── data_pipeline/
@@ -39,11 +40,11 @@
 │ ├── pull_request_template.md
 │ └── workflows/
 │     ├── deploy-chatbot.yml
-│     └── deploy-slackbot.yml
+│     └── deploy-slackbot-ecs.yml
 │     └── deploy-slack-lambda.yml
 ├── cloudformation-templates/
 │ ├── cloudformation-template-chatbot.yml
-│ └── cloudformation-template-slackbot.yml
+│ └── cloudformation-template-slackbot-ecs.yml
 ├── Dockerfiles/
 │ ├── chatbot_dockerfile
 │ └── slackbot_dockerfile
@@ -65,6 +66,7 @@
 - **`utils/`**: This directory contains utility functions and helper modules used across the application.
   - **`utils/chatbot_helper.py`**: Contains modular functions and helper utilities used across the chatbot application, promoting code reusability and organization.
   - **`utils/slackbot_helper.py`**: Contains shared helper functions for Slack bot functionality, including conversation history reconstruction, image processing, query optimization, and multimodal message creation. Used by both the Socket Mode Slack bot and Lambda-based Slack bot to eliminate code duplication.
+  - **`utils/streamlit_components.py`**: Contains reusable Streamlit UI components, including confirmation dialog functionality for user actions. Provides modular confirmation dialogs with customizable messages, warning levels, and button text for actions like scraping operations in the dashboard.
   - **`utils/prompts.py`**: Contains the system prompts used throughout the application, including specialized prompts for Slack interactions with followup question generation.
   - **`utils/feedback.py`**: Handles user feedback collection and analytics functionality for the chatbot interface.
   - **`utils/data_pipeline/`**: This subdirectory contains scripts responsible for data ingestion and processing.
@@ -97,7 +99,7 @@
 - **`.dockerignore`**: Specifies files and directories that should be ignored by Docker when building images, similar to `.gitignore`.
 - **`cloudformation-templates/`**: Directory containing AWS CloudFormation templates for infrastructure deployment.
   - **`cloudformation-template-chatbot.yml`**: AWS CloudFormation template that defines the infrastructure for the Streamlit chatbot, including VPC, ECS cluster, load balancer, and other AWS resources.
-  - **`cloudformation-template-slackbot.yml`**: AWS CloudFormation template that defines the infrastructure for the Slack bot, including VPC, ECS cluster, and other AWS resources.
+  - **`cloudformation-template-slackbot-ecs.yml`**: AWS CloudFormation template that defines the infrastructure for the Slack bot, including VPC, ECS cluster, and other AWS resources.
 - **`Dockerfiles/`**: Directory containing Docker configuration files.
   - **`Dockerfiles/chatbot_dockerfile`**: Defines the steps to build the Docker image for the Streamlit chatbot application, specifying the base image, dependencies, and application setup.
   - **`Dockerfiles/slackbot_dockerfile`**: Defines the steps to build the Docker image for the Slack bot application.
@@ -108,5 +110,5 @@
 - **`.github/`**: GitHub-specific configuration files.
   - **`.github/pull_request_template.md`**: Template for pull requests with checklist for code quality, testing, and documentation requirements.
   - **`.github/workflows/deploy-chatbot.yml`**: GitHub Actions workflow file that automates the CI/CD pipeline for deploying the Streamlit chatbot application to AWS ECS.
-  - **`.github/workflows/deploy-slackbot.yml`**: GitHub Actions workflow file that automates the CI/CD pipeline for deploying the Socket Mode Slack bot application to AWS ECS.
+  - **`.github/workflows/deploy-slackbot-ecs.yml`**: GitHub Actions workflow file that automates the CI/CD pipeline for deploying the Socket Mode Slack bot application to AWS ECS.
   - **`.github/workflows/deploy-slack-lambda.yml`**: GitHub Actions workflow file that automates the CI/CD pipeline for deploying the serverless Slack bot to AWS Lambda, including dependency layer management and API Gateway integration.
