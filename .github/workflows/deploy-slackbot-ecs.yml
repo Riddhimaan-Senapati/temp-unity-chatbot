@@ -67,7 +67,7 @@ jobs:
           echo "Creating Slackbot CloudFormation stack..."
           aws cloudformation create-stack \
             --stack-name unity-slackbot-stack \
-            --template-body file://cloudformation-templates/cloudformation-template-slackbot.yml \
+            --template-body file://cloudformation-templates/cloudformation-template-slackbot-ecs.yml \
             --tags Key=PROJECT,Value=ai4cw \
             --parameters \
               ParameterKey=EnvironmentName,ParameterValue=prod \
