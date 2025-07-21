@@ -128,7 +128,6 @@ jobs:
             --description "Dependencies for Documentation Scraper Lambda" \
             --zip-file fileb://layer.zip \
             --compatible-runtimes python3.12 \
-            --tags PROJECT=ai4cw \
             --query 'LayerVersionArn' --output text)
 
           echo "Published Layer ARN: $LAYER_VERSION_ARN"
@@ -214,7 +213,7 @@ jobs:
           echo "🚀 Documentation Scraper Lambda Deployment Complete!"
           echo "Function Name: ${{ needs.deploy-infrastructure.outputs.lambda-function-name }}"
           echo "Layer ARN: ${{ steps.lambda_layer.outputs.layer_arn }}"
-          echo "Schedule: Monday 12:00 PM EST (16:00 UTC) weekly"
+          echo "Schedule: Monday 12:00 PM EDT (16:00 UTC) weekly"
           echo ""
           echo "📋 Next Steps:"
           echo "1. Check CloudWatch logs: /aws/lambda/${{ needs.deploy-infrastructure.outputs.lambda-function-name }}"
