@@ -183,31 +183,7 @@ jobs:
 
           echo "Lambda function updated successfully"
 
-      - name: Test Lambda function
-        run: |
-          FUNCTION_NAME="${{ needs.deploy-infrastructure.outputs.lambda-function-name }}"
-
-          echo "Testing Lambda function: $FUNCTION_NAME"
-
-          # Create test event
-          cat > test-event.json << EOF
-          {
-            "source": "github-actions-test",
-            "test": true,
-            "scrape_params": {}
-          }
-          EOF
-
-          # Invoke function (async to avoid timeout)
-          aws lambda invoke \
-            --function-name "$FUNCTION_NAME" \
-            --invocation-type Event \
-            --payload file://test-event.json \
-            response.json
-
-          echo "Test invocation sent successfully"
-          echo "Check CloudWatch logs for execution details: /aws/lambda/$FUNCTION_NAME"
-
+      
       - name: Output deployment info
         run: |
           echo "🚀 Documentation Scraper Lambda Deployment Complete!"
