@@ -69,10 +69,10 @@ def calculate_query_cost(model_name, input_tokens, output_tokens):
 
 
 # Runs the chosen model on the full database of conversation threads
-def test_model_on_database(model_name):
+def test_model_on_database(model_name, source_count=10):
     # Initialize clients
     client = initialize_bedrock_client()
-    retriever = initialize_knowledge_base_retriever()
+    retriever = initialize_knowledge_base_retriever(source_count)
 
     # Get model ID
     model_id = MODELS.get(model_name)
@@ -258,7 +258,7 @@ def test_model_on_database(model_name):
     import datetime
 
     timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
-    filename = f"full_database_test_{model_name}_{timestamp}"
+    filename = f"{source_count}_full_database_test_{model_name}_{timestamp}"
 
     # Update timestamp in results
     results["test_timestamp"] = timestamp
@@ -383,10 +383,10 @@ def list_threads():
 
 
 ### Function to run the chosen thread with all models
-def compare_models(thread_name):
+def compare_models(thread_name, source_count=10):
     # Initialize clients
     client = initialize_bedrock_client()
-    retriever = initialize_knowledge_base_retriever()
+    retriever = initialize_knowledge_base_retriever(source_count)
 
     # Load all threads
     all_threads = load_conversation_threads()
@@ -560,7 +560,9 @@ def compare_models(thread_name):
     import datetime
 
     timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
-    filename = f"compare_models_{thread_name.replace(' ', '_')}_{timestamp}"
+    filename = (
+        f"{source_count}_compare_models_{thread_name.replace(' ', '_')}_{timestamp}"
+    )
 
     # Update timestamp in results
     results["test_timestamp"] = timestamp
@@ -689,12 +691,12 @@ def compare_models_json_to_markdown(json_file):
     return md_file
 
 
-def test_model_with_without_system_prompt(model_name, thread_name):
+def test_model_with_without_system_prompt(model_name, thread_name, source_count=10):
     """Test a specific model with and without system prompt on a chosen thread with comprehensive metrics"""
 
     # Initialize clients
     client = initialize_bedrock_client()
-    retriever = initialize_knowledge_base_retriever()
+    retriever = initialize_knowledge_base_retriever(source_count)
 
     # Get model ID
     model_id = MODELS.get(model_name)
@@ -950,7 +952,7 @@ def test_model_with_without_system_prompt(model_name, thread_name):
     import datetime
 
     timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
-    filename = f"system_prompt_comparison_{model_name}_{thread_name.replace(' ', '_')}_{timestamp}"
+    filename = f"{source_count}_system_prompt_comparison_{model_name}_{thread_name.replace(' ', '_')}_{timestamp}"
 
     # Update timestamp in results
     results["test_timestamp"] = timestamp
@@ -1077,15 +1079,15 @@ def system_prompt_comparison_json_to_markdown(json_file):
 # Example usage:
 ### Use list_models() to see available models
 ### Use list_threads() to see available conversation threads
-### Use test_model_on_database(model_name) to test a single model on all threads
-### Use compare_models(thread_name) to test all models on a single thread
-### Use test_model_with_without_system_prompt(model_name, thread_name) to test one model with/without system prompt
+### Use test_model_on_database(model_name, source_count) to test a single model on all threads
+### Use compare_models(thread_name, source_count) to test all models on a single thread
+### Use test_model_with_without_system_prompt(model_name, thread_name, source_count) to test one model with/without system prompt
 if __name__ == "__main__":
     # Example: Test a single model on all conversation threads
-    test_model_on_database("claude-4-sonnet")
+    test_model_on_database("llama-4-maverick", 10)
 
     # Example: Test all models on a single thread
-    # compare_models("Tricky GPU error driver update problem")
+    # compare_models("Tricky GPU error driver update problem", 10)
 
     # Example: Test a specific model with and without system prompt on a chosen thread
-    # test_model_with_without_system_prompt("claude-4-sonnet", "Unity basics")
+    # test_model_with_without_system_prompt("claude-4-sonnet", "Unity basics", 10)

@@ -76,6 +76,15 @@ st.sidebar.button(
     on_click=logout_action_with_logging,  # Changed to use the new function with logging
 )
 
+# Add source count configuration in sidebar
+source_count = st.sidebar.slider(
+    "Number of Sources",
+    min_value=5,
+    max_value=20,
+    value=10,
+    help="Choose how many sources to retrieve for context",
+)
+
 # Privacy Warning
 st.warning(
     "⚠️ **Privacy Notice**: Do not share personal information. Conversation history may be stored for system improvement purposes."
@@ -94,7 +103,7 @@ llm = initialize_llm(client=bedrock_client)
 # Initialize the Knowledge Base retriever
 # Log Retriever initialization attempt
 logger.info("Initializing Knowledge Base retriever...")
-retriever = initialize_knowledge_base_retriever()
+retriever = initialize_knowledge_base_retriever(source_count)
 
 if "messages" not in st.session_state:
     st.session_state.messages = []

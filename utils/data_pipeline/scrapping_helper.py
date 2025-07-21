@@ -1,7 +1,6 @@
 import requests
 from bs4 import BeautifulSoup
 from urllib.parse import urljoin, urlparse
-import os
 
 MASTER_PAGE_URL = "https://docs.unity.rc.umass.edu/documentation/toc/"
 HEADERS = {
