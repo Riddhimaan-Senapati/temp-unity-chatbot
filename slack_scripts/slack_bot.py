@@ -21,10 +21,6 @@ from utils.chatbot_helper import (
     retrieve_context,
 )
 
-from utils.prompts import (
-    question_system_prompt,
-    slack_system_prompt_with_followups as slack_system_prompt,
-)
 
 from utils.slackbot_helper import (
     reconstruct_history_from_slack,

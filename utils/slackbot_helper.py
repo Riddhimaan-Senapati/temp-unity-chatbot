@@ -5,7 +5,10 @@ import os
 import base64
 import requests
 from langchain_core.messages import AIMessage, HumanMessage, SystemMessage
-from utils.prompts import question_system_prompt, slack_system_prompt_with_followups as slack_system_prompt
+from utils.prompts import (
+    question_system_prompt,
+    slack_system_prompt_with_followups as slack_system_prompt,
+)
 
 logger = logging.getLogger(__name__)
 
