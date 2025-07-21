@@ -1,8 +1,8 @@
 name: Deploy Unity Slack Lambda
 
 on:
-  #push:
-    #branches: [ main ]
+  push:
+    branches: [ main ]
   workflow_dispatch:
 
 jobs:
@@ -144,7 +144,7 @@ jobs:
         id: lambda_layer
         run: |
           LAYER_NAME="unity-slackbot-dependencies"
-          REQUIREMENTS_FILE="slack_lambda/slack_lambda_requirements.txt"
+          REQUIREMENTS_FILE="lambdas/slack_lambda/requirements.txt"
           
           # Create the directory structure that Lambda Layers expect
           mkdir -p layer/python
@@ -182,7 +182,7 @@ jobs:
           # This zip should only contain slack_lambda.py and the utils directory
           # To ensure the handler is found at `slack_lambda.handler`, we need `slack_lambda.py` at the root.
           mkdir -p app_package
-          cp slack_lambda/slack_lambda.py ./app_package/
+          cp lambdas/slack_lambda/slack_lambda.py ./app_package/
           cp -r utils ./app_package/
           cd app_package
           zip -r ../lambda-deployment-package.zip .
