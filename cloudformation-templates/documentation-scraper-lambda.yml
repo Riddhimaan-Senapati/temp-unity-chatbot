@@ -32,8 +32,8 @@ Parameters:
 
   ScheduleExpression:
     Type: String
-    Default: "cron(0 16 ? * MON *)"
-    Description: EventBridge schedule expression for automatic scraping (Monday 12:00 PM EDT = 16:00 UTC)
+    Default: "cron(15 16 ? * MON *)"
+    Description: EventBridge schedule expression for automatic scraping (Monday 12:15 PM EDT = 16:15 UTC)
 
   EnableScheduledExecution:
     Type: String
