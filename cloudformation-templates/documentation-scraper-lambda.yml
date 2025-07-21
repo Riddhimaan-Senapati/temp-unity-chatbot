@@ -1,0 +1,185 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: 'AWS Lambda function for scraping documentation websites'
+
+Parameters:
+  ProjectTag:
+    Type: String
+    Default: "ai4cw"
+    Description: Project tag value for all resources
+  
+  S3BucketName:
+    Type: String
+    Description: Name of the S3 bucket for storing scraped content
+  
+  S3FolderPrefix:
+    Type: String
+    Default: "documents/"
+    Description: Folder prefix in the S3 bucket for scraped content
+  
+  LambdaTimeout:
+    Type: Number
+    Default: 900
+    MinValue: 60
+    MaxValue: 900
+    Description: Lambda function timeout in seconds (max 15 minutes)
+  
+  LambdaMemorySize:
+    Type: Number
+    Default: 1024
+    MinValue: 128
+    MaxValue: 10240
+    Description: Lambda function memory size in MB
+  
+  ScheduleExpression:
+    Type: String
+    Default: "cron(0 16 ? * MON *)"
+    Description: EventBridge schedule expression for automatic scraping (Monday 12:00 PM EST = 17:00 UTC)
+  
+  EnableScheduledExecution:
+    Type: String
+    Default: "true"
+    AllowedValues: ["true", "false"]
+    Description: Whether to enable scheduled execution of the scraper
+
+Resources:
+  # IAM Role for Lambda
+  DocumentationScraperRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub "${AWS::StackName}-documentation-scraper-role"
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: lambda.amazonaws.com
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
+      Policies:
+        - PolicyName: S3AccessPolicy
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - s3:GetObject
+                  - s3:PutObject
+                  - s3:DeleteObject
+                  - s3:ListBucket
+                  - s3:GetObjectMetadata
+                  - s3:PutObjectMetadata
+                Resource:
+                  - !Sub "arn:aws:s3:::${S3BucketName}"
+                  - !Sub "arn:aws:s3:::${S3BucketName}/*"
+        - PolicyName: CloudWatchLogsPolicy
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - logs:CreateLogGroup
+                  - logs:CreateLogStream
+                  - logs:PutLogEvents
+                Resource: !Sub "arn:aws:logs:${AWS::Region}:${AWS::AccountId}:log-group:/aws/lambda/*"
+      Tags:
+        - Key: PROJECT
+          Value: !Ref ProjectTag
+
+  # Lambda Layer for dependencies (will be created by GitHub Actions)
+  # Note: The layer will be created and uploaded by the deployment pipeline
+
+  # Lambda Function
+  DocumentationScraperFunction:
+    Type: AWS::Lambda::Function
+    Properties:
+      FunctionName: !Sub "${AWS::StackName}-documentation-scraper"
+      Description: Lambda function to scrape documentation websites and upload to S3
+      Runtime: python3.12
+      Handler: lambda_function.lambda_handler
+      Role: !GetAtt DocumentationScraperRole.Arn
+      Timeout: !Ref LambdaTimeout
+      MemorySize: !Ref LambdaMemorySize
+      Code:
+        ZipFile: |
+          import json
+          def lambda_handler(event, context):
+              return {
+                  'statusCode': 200,
+                  'body': json.dumps('Placeholder - will be updated with actual code')
+              }
+      Environment:
+        Variables:
+          S3_BUCKET_NAME: !Ref S3BucketName
+          S3_FOLDER_PREFIX: !Ref S3FolderPrefix
+          PYTHONPATH: "/opt/python:/var/runtime:/var/task"
+      # Layers will be added by GitHub Actions deployment
+      Tags:
+        - Key: PROJECT
+          Value: !Ref ProjectTag
+
+  # EventBridge Schedule for automatic execution
+  DocumentationScraperScheduleRule:
+    Type: AWS::Events::Rule
+    Condition: EnableSchedule
+    Properties:
+      Name: !Sub "${AWS::StackName}-documentation-scraper-schedule"
+      Description: "Schedule for automatic documentation scraping - Monday 12:00 PM EST weekly"
+      ScheduleExpression: !Ref ScheduleExpression
+      State: ENABLED
+      Targets:
+        - Arn: !GetAtt DocumentationScraperFunction.Arn
+          Id: DocumentationScraperTarget
+          Input: !Sub |
+            {
+              "source": "eventbridge-schedule",
+              "schedule": "${ScheduleExpression}",
+              "scheduled_time": "Monday 12:00 PM EST",
+              "scrape_params": {}
+            }
+
+  # Permission for EventBridge to invoke Lambda
+  DocumentationScraperSchedulePermission:
+    Type: AWS::Lambda::Permission
+    Condition: EnableSchedule
+    Properties:
+      FunctionName: !Ref DocumentationScraperFunction
+      Action: lambda:InvokeFunction
+      Principal: events.amazonaws.com
+      SourceArn: !GetAtt DocumentationScraperSchedul
+
+  # CloudWatch Log Group
+  DocumentationScraperLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Sub "/aws/lambda/${DocumentationScraperFunction}"
+      RetentionInDays: 14
+
+Conditions:
+  EnableSchedule: !Equals [!Ref EnableScheduledExecution, "true"]
+
+Outputs:
+  LambdaFunctionArn:
+    Description: ARN of the documentation scraper Lambda function
+    Value: !GetAtt DocumentationScraperFunction.Arn
+    Export:
+      Name: !Sub "${AWS::StackName}-LambdaFunctionArn"
+
+  LambdaFunctionName:
+    Description: Name of the documentation scraper Lambda function
+    Value: !Ref DocumentationScraperFunction
+    Export:
+      Name: !Sub "${AWS::StackName}-LambdaFunctionName"
+
+  LambdaRoleArn:
+    Description: ARN of the Lambda execution role
+    Value: !GetAtt DocumentationScraperRole.Arn
+    Export:
+      Name: !Sub "${AWS::StackName}-LambdaRoleArn"
+
+  ScheduleRuleArn:
+    Condition: EnableSchedule
+    Description: ARN of the CloudWatch Events rule for scheduled execution
+    Value: !GetAtt DocumentationScraperScheduleRule.Arn
+    Export:
+      Name: !Sub "${AWS::StackName}-ScheduleRuleArn"
