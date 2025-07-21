@@ -12,15 +12,13 @@
 ├── slack_scripts/
 │ ├── slack_bot.py
 │ ├── slack_scraper.py
-├── slack_lambda/
-│ ├── slack_lambda.py
-│ ├── slack_scraper_requirements.txt
 ├── utils/
 │ ├── chatbot_helper.py
 │ ├── slackbot_helper.py
 │ ├── streamlit_components.py
 │ ├── feedback.py
 │ ├── prompts.py
+| ├── qa_pair_tab.py
 │ └── data_pipeline/
 │     ├── scrape_and_upload_to_s3.py
 │     ├── scrapping_helper.py
@@ -58,6 +56,9 @@
 │ └── documentation_scraper/
 │     ├── lambda_function.py
 │     └── requirements.txt
+│ └── slack_lambda/
+│     ├── slack_lambda.py
+│     └── requirements.txt
 ├── .dockerignore
 ├── LICENSE
 └── .gitignore
@@ -74,6 +75,7 @@
   - **`utils/streamlit_components.py`**: Contains reusable Streamlit UI components, including confirmation dialog functionality for user actions. Provides modular confirmation dialogs with customizable messages, warning levels, and button text for actions like scraping operations in the dashboard.
   - **`utils/prompts.py`**: Contains the system prompts used throughout the application, including specialized prompts for Slack interactions with followup question generation.
   - **`utils/feedback.py`**: Handles user feedback collection and analytics functionality for the chatbot interface.
+  - **`utils/qa_pair_tab.py`**: The dashboard tab for the generated Q&A Pairs.
   - **`utils/data_pipeline/`**: This subdirectory contains scripts responsible for data ingestion and processing.
     - **`utils/data_pipeline/scrape_and_upload_to_s3.py`**: A script designed to scrape documentation content and upload it to an AWS S3 bucket.
     - **`utils/data_pipeline/scrapping_helper.py`**: Contains helper functions and utilities used by the scraping scripts within the data pipeline.
