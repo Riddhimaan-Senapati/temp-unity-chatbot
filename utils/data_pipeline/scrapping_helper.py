@@ -29,8 +29,6 @@ BLOCKED_EDU_DOMAINS = [
     # Add more domains as needed, when more universities join or their .edu links end up in the documentation
 ]
 
-# Make sure the documents directory exists
-os.makedirs("documents", exist_ok=True)
 
 # --- Helper Functions ---
 
