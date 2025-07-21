@@ -1,40 +1,40 @@
-AWSTemplateFormatVersion: '2010-09-09'
-Description: 'AWS Lambda function for scraping documentation websites'
+AWSTemplateFormatVersion: "2010-09-09"
+Description: "AWS Lambda function for scraping documentation websites"
 
 Parameters:
   ProjectTag:
     Type: String
     Default: "ai4cw"
     Description: Project tag value for all resources
-  
+
   S3BucketName:
     Type: String
     Description: Name of the S3 bucket for storing scraped content
-  
+
   S3FolderPrefix:
     Type: String
     Default: "documents/"
     Description: Folder prefix in the S3 bucket for scraped content
-  
+
   LambdaTimeout:
     Type: Number
     Default: 900
     MinValue: 60
     MaxValue: 900
     Description: Lambda function timeout in seconds (max 15 minutes)
-  
+
   LambdaMemorySize:
     Type: Number
     Default: 1024
     MinValue: 128
     MaxValue: 10240
     Description: Lambda function memory size in MB
-  
+
   ScheduleExpression:
     Type: String
-    Default: "cron(0 16 ? * MON *)"
+    Default: "cron(0 17 ? * MON *)"
     Description: EventBridge schedule expression for automatic scraping (Monday 12:00 PM EST = 17:00 UTC)
-  
+
   EnableScheduledExecution:
     Type: String
     Default: "true"
@@ -48,7 +48,7 @@ Resources:
     Properties:
       RoleName: !Sub "${AWS::StackName}-documentation-scraper-role"
       AssumeRolePolicyDocument:
-        Version: '2012-10-17'
+        Version: "2012-10-17"
         Statement:
           - Effect: Allow
             Principal:
@@ -59,7 +59,7 @@ Resources:
       Policies:
         - PolicyName: S3AccessPolicy
           PolicyDocument:
-            Version: '2012-10-17'
+            Version: "2012-10-17"
             Statement:
               - Effect: Allow
                 Action:
@@ -74,7 +74,7 @@ Resources:
                   - !Sub "arn:aws:s3:::${S3BucketName}/*"
         - PolicyName: CloudWatchLogsPolicy
           PolicyDocument:
-            Version: '2012-10-17'
+            Version: "2012-10-17"
             Statement:
               - Effect: Allow
                 Action:
@@ -146,7 +146,7 @@ Resources:
       FunctionName: !Ref DocumentationScraperFunction
       Action: lambda:InvokeFunction
       Principal: events.amazonaws.com
-      SourceArn: !GetAtt DocumentationScraperSchedul
+      SourceArn: !GetAtt DocumentationScraperScheduleRule.Arn
 
   # CloudWatch Log Group
   DocumentationScraperLogGroup:
