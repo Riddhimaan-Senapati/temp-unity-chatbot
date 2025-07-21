@@ -36,7 +36,7 @@ jobs:
 
       - name: Deploy Infrastructure Stack
         run: |
-          STACK_NAME="documentation-scraper-lambda"
+          STACK_NAME="unity-documentation-scraper-stack"
 
           echo "Deploying CloudFormation stack: $STACK_NAME"
           aws cloudformation deploy \
@@ -48,7 +48,7 @@ jobs:
               S3FolderPrefix=documents/ \
               LambdaTimeout=900 \
               LambdaMemorySize=1024 \
-              ScheduleExpression="cron(15 16 ? * MON *)" \
+              ScheduleExpression="cron(0 16 ? * SUN *)" \
               EnableScheduledExecution=true \
             --capabilities CAPABILITY_NAMED_IAM \
             --tags PROJECT=ai4cw
@@ -58,7 +58,7 @@ jobs:
       - name: Get Stack Outputs
         id: get-outputs
         run: |
-          STACK_NAME="documentation-scraper-lambda"
+          STACK_NAME="unity-documentation-scraper-stack"
 
           # Get outputs from CloudFormation stack
           LAMBDA_FUNCTION_NAME=$(aws cloudformation describe-stacks \
@@ -183,13 +183,12 @@ jobs:
 
           echo "Lambda function updated successfully"
 
-      
       - name: Output deployment info
         run: |
           echo "🚀 Documentation Scraper Lambda Deployment Complete!"
           echo "Function Name: ${{ needs.deploy-infrastructure.outputs.lambda-function-name }}"
           echo "Layer ARN: ${{ steps.lambda_layer.outputs.layer_arn }}"
-          echo "Schedule: Monday 12:15 PM EDT (16:15 UTC) weekly"
+          echo "Schedule: Sunday 12:00 PM EDT (16:00 UTC) weekly"
           echo ""
           echo "📋 Next Steps:"
           echo "1. Check CloudWatch logs: /aws/lambda/${{ needs.deploy-infrastructure.outputs.lambda-function-name }}"

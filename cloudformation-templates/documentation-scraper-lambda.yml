@@ -32,8 +32,8 @@ Parameters:
 
   ScheduleExpression:
     Type: String
-    Default: "cron(15 16 ? * MON *)"
-    Description: EventBridge schedule expression for automatic scraping (Monday 12:15 PM EDT = 16:15 UTC)
+    Default: "cron(0 16 ? * SUN *)"
+    Description: EventBridge schedule expression for automatic scraping (Sunday 12:00 PM EDT = 16:00 UTC)
 
   EnableScheduledExecution:
     Type: String
@@ -93,7 +93,7 @@ Resources:
   DocumentationScraperFunction:
     Type: AWS::Lambda::Function
     Properties:
-      FunctionName: !Sub "${AWS::StackName}-documentation-scraper"
+      FunctionName: "unity-documentation-scraper"
       Description: Lambda function to scrape documentation websites and upload to S3
       Runtime: python3.12
       Handler: lambda_function.lambda_handler
@@ -124,7 +124,7 @@ Resources:
     Condition: EnableSchedule
     Properties:
       Name: !Sub "${AWS::StackName}-documentation-scraper-schedule"
-      Description: "Schedule for automatic documentation scraping - Monday 12:00 PM EST weekly"
+      Description: "Schedule for automatic documentation scraping - Sunday 12:00 PM EDT weekly"
       ScheduleExpression: !Ref ScheduleExpression
       State: ENABLED
       Targets:
@@ -134,7 +134,7 @@ Resources:
             {
               "source": "eventbridge-schedule",
               "schedule": "${ScheduleExpression}",
-              "scheduled_time": "Monday 12:00 PM EST",
+              "scheduled_time": "Sunday 12:00 PM EDT",
               "scrape_params": {}
             }
 
