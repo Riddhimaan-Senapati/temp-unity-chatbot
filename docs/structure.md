@@ -40,11 +40,13 @@
 │ ├── pull_request_template.md
 │ └── workflows/
 │     ├── deploy-chatbot.yml
-│     └── deploy-slackbot-ecs.yml
-│     └── deploy-slack-lambda.yml
+│     ├── deploy-slackbot-ecs.yml
+│     ├── deploy-slack-lambda.yml
+│     └── deploy-documentation-scraper.yml
 ├── cloudformation-templates/
 │ ├── cloudformation-template-chatbot.yml
-│ └── cloudformation-template-slackbot-ecs.yml
+│ ├── cloudformation-template-slackbot-ecs.yml
+│ └── documentation-scraper-lambda.yml
 ├── Dockerfiles/
 │ ├── chatbot_dockerfile
 │ └── slackbot_dockerfile
@@ -53,6 +55,9 @@
 │     └── lambda_function.py
 │ └── metadata_filtering/
 │     └── lambda_function.py
+│ └── documentation_scraper/
+│     ├── lambda_function.py
+│     └── requirements.txt
 ├── .dockerignore
 ├── LICENSE
 └── .gitignore
@@ -96,10 +101,14 @@
     - **`lambdas/contextual_retrieval/lambda_function.py`**: AWS Lambda function used by AWS Bedrock Knowledge Base to generate contextual summaries for document chunks and adds them to the beginning of each chunk, improving retrieval accuracy and relevance.
   - **`lambdas/metadata_filtering/`**: This directory contains AWS lambda code(in python) for metadata filtering
     - **`lambdas/metadata_filtering/lambda_function.py`**: AWS Lambda function triggered by S3 put events to generate metadata.json files for each file in the knowledge base. It generates specific tags for each file to improve retrieval and optimizing performance.
+  - **`lambdas/documentation_scraper/`**: This directory contains AWS lambda code(in python) for automated documentation scraping
+    - **`lambdas/documentation_scraper/lambda_function.py`**: AWS Lambda function that automatically scrapes documentation websites using the utils data pipeline helpers and uploads content to S3. Scheduled to run weekly on Mondays at 12:00 PM EST via EventBridge.
+    - **`lambdas/documentation_scraper/requirements.txt`**: Python dependencies specific to the documentation scraper Lambda function.
 - **`.dockerignore`**: Specifies files and directories that should be ignored by Docker when building images, similar to `.gitignore`.
 - **`cloudformation-templates/`**: Directory containing AWS CloudFormation templates for infrastructure deployment.
   - **`cloudformation-template-chatbot.yml`**: AWS CloudFormation template that defines the infrastructure for the Streamlit chatbot, including VPC, ECS cluster, load balancer, and other AWS resources.
   - **`cloudformation-template-slackbot-ecs.yml`**: AWS CloudFormation template that defines the infrastructure for the Slack bot, including VPC, ECS cluster, and other AWS resources.
+  - **`documentation-scraper-lambda.yml`**: AWS CloudFormation template that defines the infrastructure for the documentation scraper Lambda function, including IAM roles, EventBridge scheduling, and CloudWatch logging. Configured to run weekly on Mondays at 12:00 PM EST.
 - **`Dockerfiles/`**: Directory containing Docker configuration files.
   - **`Dockerfiles/chatbot_dockerfile`**: Defines the steps to build the Docker image for the Streamlit chatbot application, specifying the base image, dependencies, and application setup.
   - **`Dockerfiles/slackbot_dockerfile`**: Defines the steps to build the Docker image for the Slack bot application.
@@ -112,3 +121,4 @@
   - **`.github/workflows/deploy-chatbot.yml`**: GitHub Actions workflow file that automates the CI/CD pipeline for deploying the Streamlit chatbot application to AWS ECS.
   - **`.github/workflows/deploy-slackbot-ecs.yml`**: GitHub Actions workflow file that automates the CI/CD pipeline for deploying the Socket Mode Slack bot application to AWS ECS.
   - **`.github/workflows/deploy-slack-lambda.yml`**: GitHub Actions workflow file that automates the CI/CD pipeline for deploying the serverless Slack bot to AWS Lambda, including dependency layer management and API Gateway integration.
+  - **`.github/workflows/deploy-documentation-scraper.yml`**: GitHub Actions workflow file that automates the CI/CD pipeline for deploying the documentation scraper Lambda function, including dependency layer creation, function deployment, and EventBridge scheduling configuration.
