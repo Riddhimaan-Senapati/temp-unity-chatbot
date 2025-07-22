@@ -33,7 +33,7 @@ Parameters:
   ScheduleExpression:
     Type: String
     Default: "cron(0 16 ? * SUN *)"
-    Description: EventBridge schedule expression for automatic scraping (Sunday 12:00 PM EDT = 16:00 UTC)
+    Description: EventBridge schedule expression for automatic scraping (Sunday 12:00 PM EDT/11:00 AM EST = 16:00 UTC)
 
   EnableScheduledExecution:
     Type: String
@@ -124,7 +124,7 @@ Resources:
     Condition: EnableSchedule
     Properties:
       Name: !Sub "${AWS::StackName}-documentation-scraper-schedule"
-      Description: "Schedule for automatic documentation scraping - Sunday 12:00 PM EDT weekly"
+      Description: "Schedule for automatic documentation scraping - Sunday 12:00 PM EDT/11:00 AM EST weekly"
       ScheduleExpression: !Ref ScheduleExpression
       State: ENABLED
       Targets:
@@ -134,7 +134,7 @@ Resources:
             {
               "source": "eventbridge-schedule",
               "schedule": "${ScheduleExpression}",
-              "scheduled_time": "Sunday 12:00 PM EDT",
+              "scheduled_time": "Sunday 12:00 PM EDT/11:00 AM EST",
               "scrape_params": {}
             }
 

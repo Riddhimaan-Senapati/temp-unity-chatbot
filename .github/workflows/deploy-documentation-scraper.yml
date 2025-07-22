@@ -188,7 +188,7 @@ jobs:
           echo "🚀 Documentation Scraper Lambda Deployment Complete!"
           echo "Function Name: ${{ needs.deploy-infrastructure.outputs.lambda-function-name }}"
           echo "Layer ARN: ${{ steps.lambda_layer.outputs.layer_arn }}"
-          echo "Schedule: Sunday 12:00 PM EDT (16:00 UTC) weekly"
+          echo "Schedule: Sunday 12:00 PM EDT/11:00 AM EST (16:00 UTC) weekly"
           echo ""
           echo "📋 Next Steps:"
           echo "1. Check CloudWatch logs: /aws/lambda/${{ needs.deploy-infrastructure.outputs.lambda-function-name }}"

@@ -32,8 +32,8 @@ Parameters:
 
   ScheduleExpression:
     Type: String
-    Default: "cron(0 19 ? * TUE *)"
-    Description: EventBridge schedule expression for automatic scraping (Tuesday 3:00 PM EDT = 19:00 UTC)
+    Default: "cron(0 16 ? * SUN *)"
+    Description: EventBridge schedule expression for automatic scraping (Sunday 12:00 PM EDT/11:00 AM EST = 16:00 UTC)
 
   EnableScheduledExecution:
     Type: String
@@ -121,7 +121,7 @@ Resources:
     Condition: EnableSchedule
     Properties:
       Name: !Sub "${AWS::StackName}-slack-scraper-schedule"
-      Description: "Schedule for automatic Slack conversation scraping - Tuesday 3:00 PM EDT weekly"
+      Description: "Schedule for automatic Slack conversation scraping - Sunday 12:00 PM EDT/11:00 AM EST weekly"
       ScheduleExpression: !Ref ScheduleExpression
       State: ENABLED
       Targets:
@@ -131,7 +131,7 @@ Resources:
             {
               "source": "eventbridge-schedule",
               "schedule": "${ScheduleExpression}",
-              "scheduled_time": "Tuesday 3:00 PM EDT",
+              "scheduled_time": "Sunday 12:00 PM EDT/11:00 AM EST",
               "days_back": 7
             }
 

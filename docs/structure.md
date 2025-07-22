@@ -40,11 +40,13 @@
 │     ├── deploy-chatbot.yml
 │     ├── deploy-slackbot-ecs.yml
 │     ├── deploy-slack-lambda.yml
-│     └── deploy-documentation-scraper.yml
+│     ├── deploy-documentation-scraper.yml
+│     └── deploy-slack-scraper.yml
 ├── cloudformation-templates/
 │ ├── cloudformation-template-chatbot.yml
 │ ├── cloudformation-template-slackbot-ecs.yml
-│ └── documentation-scraper-lambda.yml
+│ ├── documentation-scraper-lambda.yml
+│ └── slack-scraper-lambda.yml
 ├── Dockerfiles/
 │ ├── chatbot_dockerfile
 │ └── slackbot_dockerfile
@@ -55,6 +57,12 @@
 │     └── lambda_function.py
 │ └── documentation_scraper/
 │     ├── lambda_function.py
+│     └── requirements.txt
+│ └── slack_scraper/
+│     ├── lambda_function.py
+│     └── requirements.txt
+│ └── slack_lambda/
+│     ├── slack_lambda.py
 │     └── requirements.txt
 │ └── slack_lambda/
 │     ├── slack_lambda.py
@@ -84,11 +92,10 @@
 - **`qa_pairs/`**: This directory contains scripts for generating question-answer pairs from Slack conversations.
   - **`qa_pairs/slack_qa_generator.py`**: A script that converts Slack conversations from S3 markdown into structured question-answer pairs using LLM processing.
 - **`slack_scripts/`**: This directory contains Slack-related functionality for Socket Mode deployment.
+
   - **`slack_scripts/slack_bot.py`**: The core Slack bot code that implements the Retrieval-Augmented Generation (RAG) chatbot functionality using the Slack Bolt library with Socket Mode for persistent connections. Designed for ECS deployment.
   - **`slack_scripts/slack_scraper.py`**: A script to scrape conversations from Slack channels and store them as markdown files in S3.
-- **`slack_lambda/`**: This directory contains AWS Lambda-based Slack bot functionality for serverless deployment.
-  - **`slack_lambda/slack_lambda.py`**: The serverless version of the Slack bot that implements RAG chatbot functionality using AWS Lambda with lazy listeners for FaaS environments. Uses the same shared helper functions as the Socket Mode version but optimized for Lambda's execution model.
-  - **`slack_lambda/slack_lambda_requirements.txt`**: Python dependencies specific to the Lambda deployment of the Slack bot.
+
 - **`docs/`**: This directory contains documentation files.
   - **`docs/README-DEPLOYMENT.md`**: Detailed instructions for deploying the application to AWS.
   - **`docs/structure.md`**: Detailed project structure and file descriptions.
@@ -104,13 +111,20 @@
   - **`lambdas/metadata_filtering/`**: This directory contains AWS lambda code(in python) for metadata filtering
     - **`lambdas/metadata_filtering/lambda_function.py`**: AWS Lambda function triggered by S3 put events to generate metadata.json files for each file in the knowledge base. It generates specific tags for each file to improve retrieval and optimizing performance.
   - **`lambdas/documentation_scraper/`**: This directory contains AWS lambda code(in python) for automated documentation scraping
-    - **`lambdas/documentation_scraper/lambda_function.py`**: AWS Lambda function that automatically scrapes documentation websites using the utils data pipeline helpers and uploads content to S3. Scheduled to run weekly on Mondays at 12:00 PM EST via EventBridge.
+    - **`lambdas/documentation_scraper/lambda_function.py`**: AWS Lambda function that automatically scrapes documentation websites using the utils data pipeline helpers and uploads content to S3. Scheduled to run weekly on Sundays at 12:00 PM EDT/11:00 AM EST via EventBridge.
     - **`lambdas/documentation_scraper/requirements.txt`**: Python dependencies specific to the documentation scraper Lambda function.
+  - **`lambdas/slack_scraper/`**: This directory contains AWS lambda code(in python) for automated Slack conversation scraping
+    - **`lambdas/slack_scraper/lambda_function.py`**: AWS Lambda function that automatically scrapes Slack channel conversations from the last week using the slack_scripts/slack_scraper.py functions and uploads them to S3. Scheduled to run weekly on Sundays at 12:00 PM EDT/11:00 AM EST via EventBridge.
+    - **`lambdas/slack_scraper/requirements.txt`**: Python dependencies specific to the Slack scraper Lambda function.
+  - **`lambdas/slack_lambda/`**: This directory contains AWS lambda code(in python) for serverless Slack bot functionality
+    - **`lambdas/slack_lambda/slack_lambda.py`**: The serverless version of the Slack bot that implements RAG chatbot functionality using AWS Lambda with lazy listeners for FaaS environments. Uses the same shared helper functions as the Socket Mode version but optimized for Lambda's execution model.
+    - **`lambdas/slack_lambda/requirements.txt`**: Python dependencies specific to the Lambda deployment of the Slack bot.
 - **`.dockerignore`**: Specifies files and directories that should be ignored by Docker when building images, similar to `.gitignore`.
 - **`cloudformation-templates/`**: Directory containing AWS CloudFormation templates for infrastructure deployment.
   - **`cloudformation-template-chatbot.yml`**: AWS CloudFormation template that defines the infrastructure for the Streamlit chatbot, including VPC, ECS cluster, load balancer, and other AWS resources.
   - **`cloudformation-template-slackbot-ecs.yml`**: AWS CloudFormation template that defines the infrastructure for the Slack bot, including VPC, ECS cluster, and other AWS resources.
-  - **`documentation-scraper-lambda.yml`**: AWS CloudFormation template that defines the infrastructure for the documentation scraper Lambda function, including IAM roles, EventBridge scheduling, and CloudWatch logging. Configured to run weekly on Mondays at 12:00 PM EST.
+  - **`documentation-scraper-lambda.yml`**: AWS CloudFormation template that defines the infrastructure for the documentation scraper Lambda function, including IAM roles, EventBridge scheduling, and CloudWatch logging. Configured to run weekly on Sundays at 12:00 PM EDT/11:00 AM EST.
+  - **`slack-scraper-lambda.yml`**: AWS CloudFormation template that defines the infrastructure for the Slack conversation scraper Lambda function, including IAM roles, EventBridge scheduling, and CloudWatch logging. Configured to run weekly on Sundays at 12:00 PM EDT/11:00 AM EST.
 - **`Dockerfiles/`**: Directory containing Docker configuration files.
   - **`Dockerfiles/chatbot_dockerfile`**: Defines the steps to build the Docker image for the Streamlit chatbot application, specifying the base image, dependencies, and application setup.
   - **`Dockerfiles/slackbot_dockerfile`**: Defines the steps to build the Docker image for the Slack bot application.
@@ -124,3 +138,4 @@
   - **`.github/workflows/deploy-slackbot-ecs.yml`**: GitHub Actions workflow file that automates the CI/CD pipeline for deploying the Socket Mode Slack bot application to AWS ECS.
   - **`.github/workflows/deploy-slack-lambda.yml`**: GitHub Actions workflow file that automates the CI/CD pipeline for deploying the serverless Slack bot to AWS Lambda, including dependency layer management and API Gateway integration.
   - **`.github/workflows/deploy-documentation-scraper.yml`**: GitHub Actions workflow file that automates the CI/CD pipeline for deploying the documentation scraper Lambda function, including dependency layer creation, function deployment, and EventBridge scheduling configuration.
+  - **`.github/workflows/deploy-slack-scraper.yml`**: GitHub Actions workflow file that automates the CI/CD pipeline for deploying the Slack conversation scraper Lambda function, including dependency layer creation, function deployment, and EventBridge scheduling configuration.
