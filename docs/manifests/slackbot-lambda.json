@@ -1,0 +1,45 @@
+{
+    "display_information": {
+        "name": "UnityBot",
+        "description": "Documentation chatbot",
+        "background_color": "#2c2d30",
+        "long_description": "This Slack bot helps answer questions about the Unity High Performance Computing (HPC) cluster at UMass. It uses the official Unity documentation at https://docs.unity.rc.umass.edu/ to guide users on job submissions, module usage, system navigation, and troubleshooting. Ask anything related to using Unity HPC effectively!"
+    },
+    "features": {
+        "app_home": {
+            "home_tab_enabled": true,
+            "messages_tab_enabled": false,
+            "messages_tab_read_only_enabled": false
+        },
+        "bot_user": {
+            "display_name": "UnityBot",
+            "always_online": true
+        }
+    },
+    "oauth_config": {
+        "scopes": {
+            "bot": [
+                "app_mentions:read",
+                "assistant:write",
+                "channels:history",
+                "chat:write",
+                "groups:history",
+                "im:history",
+                "im:read",
+                "users:read",
+                "files:read"
+            ]
+        }
+    },
+    "settings": {
+        "event_subscriptions": {
+            "request_url": "https://a4i4scsgfj.execute-api.us-east-1.amazonaws.com/prod/slack",
+            "bot_events": [
+                "app_mention"
+            ]
+        },
+        "org_deploy_enabled": false,
+        "socket_mode_enabled": false,
+        "token_rotation_enabled": false
+    }
+}

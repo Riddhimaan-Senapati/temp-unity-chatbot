@@ -1,0 +1,47 @@
+{
+    "display_information": {
+        "name": "Unity_bot",
+        "description": "bot to respond to questions about the unity_documentation",
+        "background_color": "#2c2d30"
+    },
+    "features": {
+        "app_home": {
+            "home_tab_enabled": true,
+            "messages_tab_enabled": false,
+            "messages_tab_read_only_enabled": false
+        },
+        "bot_user": {
+            "display_name": "Unity_bot",
+            "always_online": false
+        }
+    },
+    "oauth_config": {
+        "scopes": {
+            "bot": [
+                "app_mentions:read",
+                "assistant:write",
+                "channels:history",
+                "chat:write",
+                "groups:history",
+                "im:history",
+                "im:read",
+                "users:read",
+                "files:read"
+            ]
+        }
+    },
+    "settings": {
+        "event_subscriptions": {
+            "request_url": "https://rn53la4hs1.execute-api.us-east-1.amazonaws.com/prod/slack",
+            "bot_events": [
+                "app_mention"
+            ]
+        },
+        "interactivity": {
+            "is_enabled": true
+        },
+        "org_deploy_enabled": false,
+        "socket_mode_enabled": true,
+        "token_rotation_enabled": false
+    }
+}
