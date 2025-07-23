@@ -176,7 +176,6 @@ Resources:
     Properties:
       RestApiId: !Ref SlackAPI
       StageName: prod
-      StageDescription: Production stage for Unity Slack Bot
 
   # Lambda Permission for API Gateway
   LambdaAPIGatewayPermission:
@@ -185,7 +184,7 @@ Resources:
       FunctionName: !Ref SlackLambdaFunction
       Action: lambda:InvokeFunction
       Principal: apigateway.amazonaws.com
-      SourceArn: !Sub "${SlackAPI}/*/POST/slack"
+      SourceArn: !Sub "arn:aws:execute-api:${AWS::Region}:${AWS::AccountId}:${SlackAPI}/*/POST/slack"
 
   # CloudWatch Log Group
   SlackLambdaLogGroup:

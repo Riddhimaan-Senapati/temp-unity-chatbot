@@ -2,20 +2,20 @@ name: Deploy Unity Slack Lambda Bot
 
 on:
   push:
-    branches: [ main ]
+    branches: [main]
     paths:
-      - 'lambdas/slack_lambda/**'
-      - 'utils/slackbot_helper.py'
-      - 'utils/chatbot_helper.py'
-      - 'utils/prompts.py'
-      - 'cloudformation-templates/slack-lambda-infrastructure.yml'
-      - '.github/workflows/deploy-slack-lambda-bot.yml'
+      - "lambdas/slack_lambda/**"
+      - "utils/slackbot_helper.py"
+      - "utils/chatbot_helper.py"
+      - "utils/prompts.py"
+      - "cloudformation-templates/slack-lambda-infrastructure.yml"
+      - ".github/workflows/deploy-slack-lambda-bot.yml"
   workflow_dispatch:
     inputs:
       force_deploy:
-        description: 'Force deployment even without changes'
+        description: "Force deployment even without changes"
         required: false
-        default: 'false'
+        default: "false"
         type: boolean
 
 jobs:
@@ -25,22 +25,22 @@ jobs:
       lambda-function-name: ${{ steps.get-outputs.outputs.lambda-function-name }}
       lambda-role-arn: ${{ steps.get-outputs.outputs.lambda-role-arn }}
       api-gateway-endpoint: ${{ steps.get-outputs.outputs.api-gateway-endpoint }}
-    
+
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
-      
+
       - name: Configure AWS credentials
         uses: aws-actions/configure-aws-credentials@v4
         with:
           aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           aws-region: us-east-1
-      
+
       - name: Deploy Infrastructure Stack
         run: |
           STACK_NAME="unity-slack-lambda-infrastructure"
-          
+
           echo "Deploying CloudFormation stack: $STACK_NAME"
           aws cloudformation deploy \
             --template-file cloudformation-templates/slack-lambda-infrastructure.yml \
@@ -55,34 +55,34 @@ jobs:
               LambdaMemorySize=1024 \
             --capabilities CAPABILITY_NAMED_IAM \
             --tags PROJECT=ai4cw
-          
+
           echo "Stack deployment completed successfully"
-      
+
       - name: Get Stack Outputs
         id: get-outputs
         run: |
           STACK_NAME="unity-slack-lambda-infrastructure"
-          
+
           # Get outputs from CloudFormation stack
           LAMBDA_FUNCTION_NAME=$(aws cloudformation describe-stacks \
             --stack-name $STACK_NAME \
             --query 'Stacks[0].Outputs[?OutputKey==`LambdaFunctionName`].OutputValue' \
             --output text)
-          
+
           LAMBDA_ROLE_ARN=$(aws cloudformation describe-stacks \
             --stack-name $STACK_NAME \
             --query 'Stacks[0].Outputs[?OutputKey==`LambdaRoleArn`].OutputValue' \
             --output text)
-          
+
           API_GATEWAY_ENDPOINT=$(aws cloudformation describe-stacks \
             --stack-name $STACK_NAME \
             --query 'Stacks[0].Outputs[?OutputKey==`APIGatewayEndpoint`].OutputValue' \
             --output text)
-          
+
           echo "Lambda Function Name: $LAMBDA_FUNCTION_NAME"
           echo "Lambda Role ARN: $LAMBDA_ROLE_ARN"
           echo "API Gateway Endpoint: $API_GATEWAY_ENDPOINT"
-          
+
           # Set outputs for next job
           echo "lambda-function-name=$LAMBDA_FUNCTION_NAME" >> $GITHUB_OUTPUT
           echo "lambda-role-arn=$LAMBDA_ROLE_ARN" >> $GITHUB_OUTPUT
@@ -91,54 +91,54 @@ jobs:
   deploy-lambda:
     runs-on: ubuntu-latest
     needs: deploy-infrastructure
-    
+
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
-      
+
       - name: Configure AWS credentials
         uses: aws-actions/configure-aws-credentials@v4
         with:
           aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           aws-region: us-east-1
-      
+
       - name: Set up Python
         uses: actions/setup-python@v4
         with:
-          python-version: '3.12'
+          python-version: "3.12"
 
       - name: Build and Publish Dependencies Layer
         id: lambda_layer
         run: |
           LAYER_NAME="unity-slackbot-dependencies"
           REQUIREMENTS_FILE="lambdas/slack_lambda/requirements.txt"
-          
+
           # Create the directory structure that Lambda Layers expect
           mkdir -p layer/python
-          
+
           echo "Installing dependencies into layer directory..."
           pip install -r $REQUIREMENTS_FILE -t ./layer/python
-          
+
           # CRITICAL FIX: Remove boto3 and botocore AFTER installation
           # because they are pulled in by langchain-aws but already exist in the Lambda runtime.
           echo "Removing AWS SDKs (boto3, botocore) from the layer to reduce size..."
           rm -rf ./layer/python/boto3
           rm -rf ./layer/python/botocore
           echo "AWS SDKs removed."
-          
+
           # Remove unnecessary files to reduce layer size
           echo "Cleaning up layer directory..."
           find ./layer/python -type d -name "__pycache__" -exec rm -rf {} + 2>/dev/null || true
           find ./layer/python -name "*.pyc" -delete 2>/dev/null || true
           find ./layer/python -name "*.pyo" -delete 2>/dev/null || true
           find ./layer/python -name "*.dist-info" -exec rm -rf {} + 2>/dev/null || true
-          
+
           cd layer
           echo "Zipping the layer contents..."
           zip -r ../layer.zip . -x "*.pyc" "*/__pycache__/*"
           cd ..
-          
+
           echo "Publishing new layer version..."
           LAYER_VERSION_ARN=$(aws lambda publish-layer-version \
             --layer-name $LAYER_NAME \
@@ -146,46 +146,46 @@ jobs:
             --zip-file fileb://layer.zip \
             --compatible-runtimes python3.12 \
             --query 'LayerVersionArn' --output text)
-          
+
           echo "Published Layer ARN: $LAYER_VERSION_ARN"
           echo "layer_arn=$LAYER_VERSION_ARN" >> $GITHUB_OUTPUT
 
       - name: Create Lambda deployment package
         run: |
           echo "Creating zip file with only application code..."
-          
+
           # Create deployment package directory
           mkdir -p app_package
-          
+
           # Copy Lambda function
           cp lambdas/slack_lambda/slack_lambda.py ./app_package/
-          
+
           # Copy utils directory (needed for imports)
           cp -r utils ./app_package/
-          
+
           # Create the deployment zip
           cd app_package
           zip -r ../lambda-deployment-package.zip . -x "*.pyc" "*/__pycache__/*"
           cd ..
-          
+
           echo "Lambda deployment package created successfully"
 
       - name: Deploy Lambda function
         run: |
           FUNCTION_NAME="${{ needs.deploy-infrastructure.outputs.lambda-function-name }}"
           LAYER_ARN="${{ steps.lambda_layer.outputs.layer_arn }}"
-          
+
           echo "Updating Lambda function: $FUNCTION_NAME"
           echo "Using Layer ARN: $LAYER_ARN"
-          
+
           # Update function code
           aws lambda update-function-code \
             --function-name "$FUNCTION_NAME" \
             --zip-file fileb://lambda-deployment-package.zip
-          
+
           echo "Waiting for function code update to complete..."
           aws lambda wait function-updated --function-name "$FUNCTION_NAME"
-          
+
           # Update function configuration with layer
           aws lambda update-function-configuration \
             --function-name "$FUNCTION_NAME" \
@@ -199,7 +199,7 @@ jobs:
             }" \
             --timeout 300 \
             --memory-size 1024
-          
+
           echo "Lambda function updated successfully"
 
       - name: Output deployment info
