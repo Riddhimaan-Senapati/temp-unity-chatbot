@@ -186,12 +186,7 @@ Resources:
       Principal: apigateway.amazonaws.com
       SourceArn: !Sub "arn:aws:execute-api:${AWS::Region}:${AWS::AccountId}:${SlackAPI}/*/POST/slack"
 
-  # CloudWatch Log Group
-  SlackLambdaLogGroup:
-    Type: AWS::Logs::LogGroup
-    Properties:
-      LogGroupName: !Sub "/aws/lambda/${SlackLambdaFunction}"
-      RetentionInDays: 14
+
 
 Outputs:
   LambdaFunctionArn:
