@@ -1,0 +1,232 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: 'Infrastructure for Unity Slack Lambda Bot with API Gateway'
+
+Parameters:
+  ProjectTag:
+    Type: String
+    Default: "ai4cw"
+    Description: Project tag value for all resources
+  
+  SlackBotToken:
+    Type: String
+    NoEcho: true
+    Description: Slack Bot Token for the Lambda function
+  
+  SlackSigningSecret:
+    Type: String
+    NoEcho: true
+    Description: Slack Signing Secret for request verification
+  
+  KnowledgeBaseId:
+    Type: String
+    Description: AWS Bedrock Knowledge Base ID
+  
+  S3BucketName:
+    Type: String
+    Description: Name of the S3 bucket for the knowledge base
+  
+  LambdaTimeout:
+    Type: Number
+    Default: 300
+    MinValue: 60
+    MaxValue: 900
+    Description: Lambda function timeout in seconds
+  
+  LambdaMemorySize:
+    Type: Number
+    Default: 1024
+    MinValue: 128
+    MaxValue: 10240
+    Description: Lambda function memory size in MB
+
+Resources:
+  # IAM Role for Lambda
+  SlackLambdaRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub "${AWS::StackName}-slack-lambda-role"
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: lambda.amazonaws.com
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
+      Policies:
+        - PolicyName: BedrockAccessPolicy
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - bedrock:InvokeModel
+                  - bedrock:Converse
+                  - bedrock:ConverseStream
+                  - bedrock:Retrieve
+                  - bedrock:RetrieveAndGenerate
+                Resource: "*"
+        - PolicyName: S3AccessPolicy
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - s3:GetObject
+                  - s3:ListBucket
+                  - s3:GetObjectMetadata
+                Resource:
+                  - !Sub "arn:aws:s3:::${S3BucketName}"
+                  - !Sub "arn:aws:s3:::${S3BucketName}/*"
+        - PolicyName: LambdaSelfInvokePolicy
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action: lambda:InvokeFunction
+                Resource: !Sub "arn:aws:lambda:${AWS::Region}:${AWS::AccountId}:function:unity-slack-lambda"
+        - PolicyName: CloudWatchLogsPolicy
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - logs:CreateLogGroup
+                  - logs:CreateLogStream
+                  - logs:PutLogEvents
+                Resource: !Sub "arn:aws:logs:${AWS::Region}:${AWS::AccountId}:log-group:/aws/lambda/*"
+      Tags:
+        - Key: PROJECT
+          Value: !Ref ProjectTag
+
+  # Lambda Function
+  SlackLambdaFunction:
+    Type: AWS::Lambda::Function
+    Properties:
+      FunctionName: "unity-slack-lambda"
+      Description: Unity Slack Bot Lambda Function with API Gateway integration
+      Runtime: python3.12
+      Handler: slack_lambda.handler
+      Role: !GetAtt SlackLambdaRole.Arn
+      Timeout: !Ref LambdaTimeout
+      MemorySize: !Ref LambdaMemorySize
+      Code:
+        ZipFile: |
+          import json
+          def handler(event, context):
+              return {
+                  'statusCode': 200,
+                  'body': json.dumps('Placeholder - will be updated with actual code')
+              }
+      Environment:
+        Variables:
+          SLACK_BOT_TOKEN: !Ref SlackBotToken
+          SLACK_SIGNING_SECRET: !Ref SlackSigningSecret
+          KNOWLEDGE_BASE_ID: !Ref KnowledgeBaseId
+          S3_BUCKET_NAME: !Ref S3BucketName
+          PYTHONPATH: "/opt/python:/var/runtime:/var/task"
+      # Layers will be added by GitHub Actions deployment
+      Tags:
+        - Key: PROJECT
+          Value: !Ref ProjectTag
+
+  # API Gateway REST API
+  SlackAPI:
+    Type: AWS::ApiGateway::RestApi
+    Properties:
+      Name: "unity-slack-api"
+      Description: Unity Slack Bot API Gateway
+      EndpointConfiguration:
+        Types:
+          - REGIONAL
+      Tags:
+        - Key: PROJECT
+          Value: !Ref ProjectTag
+
+  # API Gateway Resource for /slack
+  SlackResource:
+    Type: AWS::ApiGateway::Resource
+    Properties:
+      RestApiId: !Ref SlackAPI
+      ParentId: !GetAtt SlackAPI.RootResourceId
+      PathPart: slack
+
+  # API Gateway Method (POST)
+  SlackMethod:
+    Type: AWS::ApiGateway::Method
+    Properties:
+      RestApiId: !Ref SlackAPI
+      ResourceId: !Ref SlackResource
+      HttpMethod: POST
+      AuthorizationType: NONE
+      Integration:
+        Type: AWS_PROXY
+        IntegrationHttpMethod: POST
+        Uri: !Sub "arn:aws:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${SlackLambdaFunction.Arn}/invocations"
+        IntegrationResponses:
+          - StatusCode: 200
+      MethodResponses:
+        - StatusCode: 200
+
+  # API Gateway Deployment
+  SlackAPIDeployment:
+    Type: AWS::ApiGateway::Deployment
+    DependsOn: SlackMethod
+    Properties:
+      RestApiId: !Ref SlackAPI
+      StageName: prod
+      StageDescription: Production stage for Unity Slack Bot
+
+  # Lambda Permission for API Gateway
+  LambdaAPIGatewayPermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      FunctionName: !Ref SlackLambdaFunction
+      Action: lambda:InvokeFunction
+      Principal: apigateway.amazonaws.com
+      SourceArn: !Sub "${SlackAPI}/*/POST/slack"
+
+  # CloudWatch Log Group
+  SlackLambdaLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Sub "/aws/lambda/${SlackLambdaFunction}"
+      RetentionInDays: 14
+
+Outputs:
+  LambdaFunctionArn:
+    Description: ARN of the Slack Lambda function
+    Value: !GetAtt SlackLambdaFunction.Arn
+    Export:
+      Name: !Sub "${AWS::StackName}-LambdaFunctionArn"
+
+  LambdaFunctionName:
+    Description: Name of the Slack Lambda function
+    Value: !Ref SlackLambdaFunction
+    Export:
+      Name: !Sub "${AWS::StackName}-LambdaFunctionName"
+
+  LambdaRoleArn:
+    Description: ARN of the Lambda execution role
+    Value: !GetAtt SlackLambdaRole.Arn
+    Export:
+      Name: !Sub "${AWS::StackName}-LambdaRoleArn"
+
+  APIGatewayId:
+    Description: ID of the API Gateway
+    Value: !Ref SlackAPI
+    Export:
+      Name: !Sub "${AWS::StackName}-APIGatewayId"
+
+  APIGatewayEndpoint:
+    Description: API Gateway endpoint URL for Slack
+    Value: !Sub "https://${SlackAPI}.execute-api.${AWS::Region}.amazonaws.com/prod/slack"
+    Export:
+      Name: !Sub "${AWS::StackName}-APIGatewayEndpoint"
+
+  SlackResourceId:
+    Description: ID of the /slack resource
+    Value: !Ref SlackResource
+    Export:
+      Name: !Sub "${AWS::StackName}-SlackResourceId"
