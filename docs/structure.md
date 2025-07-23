@@ -41,12 +41,14 @@
 │     ├── deploy-slackbot-ecs.yml
 │     ├── deploy-slack-lambda.yml
 │     ├── deploy-documentation-scraper.yml
-│     └── deploy-slack-scraper.yml
+│     ├── deploy-slack-scraper.yml
+│     └── deploy-slack-lambda-bot.yml
 ├── cloudformation-templates/
 │ ├── cloudformation-template-chatbot.yml
 │ ├── cloudformation-template-slackbot-ecs.yml
 │ ├── documentation-scraper-lambda.yml
-│ └── slack-scraper-lambda.yml
+│ ├── slack-scraper-lambda.yml
+│ └── slack-lambda-infrastructure.yml
 ├── Dockerfiles/
 │ ├── chatbot_dockerfile
 │ └── slackbot_dockerfile
@@ -125,6 +127,7 @@
   - **`cloudformation-template-slackbot-ecs.yml`**: AWS CloudFormation template that defines the infrastructure for the Slack bot, including VPC, ECS cluster, and other AWS resources.
   - **`documentation-scraper-lambda.yml`**: AWS CloudFormation template that defines the infrastructure for the documentation scraper Lambda function, including IAM roles, EventBridge scheduling, and CloudWatch logging. Configured to run weekly on Sundays at 12:00 PM EDT/11:00 AM EST.
   - **`slack-scraper-lambda.yml`**: AWS CloudFormation template that defines the infrastructure for the Slack conversation scraper Lambda function, including IAM roles, EventBridge scheduling, and CloudWatch logging. Configured to run weekly on Sundays at 12:00 PM EDT/11:00 AM EST.
+  - **`slack-lambda-infrastructure.yml`**: AWS CloudFormation template that defines the complete infrastructure for the Unity Slack Lambda bot, including the Lambda function, API Gateway REST API, IAM roles, and all necessary permissions for serverless Slack bot functionality.
 - **`Dockerfiles/`**: Directory containing Docker configuration files.
   - **`Dockerfiles/chatbot_dockerfile`**: Defines the steps to build the Docker image for the Streamlit chatbot application, specifying the base image, dependencies, and application setup.
   - **`Dockerfiles/slackbot_dockerfile`**: Defines the steps to build the Docker image for the Slack bot application.
@@ -139,3 +142,4 @@
   - **`.github/workflows/deploy-slack-lambda.yml`**: GitHub Actions workflow file that automates the CI/CD pipeline for deploying the serverless Slack bot to AWS Lambda, including dependency layer management and API Gateway integration.
   - **`.github/workflows/deploy-documentation-scraper.yml`**: GitHub Actions workflow file that automates the CI/CD pipeline for deploying the documentation scraper Lambda function, including dependency layer creation, function deployment, and EventBridge scheduling configuration.
   - **`.github/workflows/deploy-slack-scraper.yml`**: GitHub Actions workflow file that automates the CI/CD pipeline for deploying the Slack conversation scraper Lambda function, including dependency layer creation, function deployment, and EventBridge scheduling configuration.
+  - **`.github/workflows/deploy-slack-lambda-bot.yml`**: GitHub Actions workflow file that automates the CI/CD pipeline for deploying the Unity Slack Lambda bot with API Gateway integration, including infrastructure deployment, dependency layer creation, and function deployment.

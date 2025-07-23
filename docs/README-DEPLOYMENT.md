@@ -53,6 +53,7 @@ This project uses a dual-deployment architecture:
 Add the following secrets to your GitHub repository:
 
 ### ✅ Required Secrets:
+
 1. `AWS_ACCESS_KEY_ID`: Your AWS access key
 2. `AWS_SECRET_ACCESS_KEY`: Your AWS secret key
 3. `AWS_REGION`: The AWS region (e.g., `us-east-1`)
@@ -62,6 +63,7 @@ Add the following secrets to your GitHub repository:
 7. `SLACK_APP_TOKEN`: Your Slack App Token (for slackbot)
 
 ### ⚙️ Optional Secrets (defaults will be used if not provided):
+
 8. `ECR_REPOSITORY`: Name of the chatbot ECR repository (default: `unity-chatbot`)
 9. `SLACKBOT_ECR_REPOSITORY`: Name of the slackbot ECR repository (default: `unity-slackbot`)
 10. `KNOWLEDGE_BASE_ID`: Your AWS Bedrock Knowledge Base ID
@@ -71,6 +73,7 @@ Add the following secrets to your GitHub repository:
 14. `UNITY_PASSWORD`: Password for Unity authentication
 
 To add these secrets:
+
 1. Go to your GitHub repository
 2. Click on "Settings" > "Secrets and variables" > "Actions"
 3. Click "New repository secret" and add each secret
@@ -86,6 +89,7 @@ git push origin main
 ```
 
 The GitHub Actions workflows will automatically:
+
 1. Build Docker images for both applications
 2. Push the images to Amazon ECR
 3. Create the CloudFormation stacks if they don't exist
@@ -95,10 +99,12 @@ The GitHub Actions workflows will automatically:
 ## ✅ Step 4: Verify Deployments
 
 ### 🌐 Chatbot Verification
+
 1. Wait for the GitHub Actions workflows to complete (check the "Actions" tab in your repository).
 2. Visit your domain (e.g., `https://chatbot.yourdomain.com`) to verify that the chatbot is running.
 
 ### 💬 Slackbot Verification
+
 1. Check that the Slackbot is online in your Slack workspace.
 2. Send a message to the bot to verify it responds.
 3. Check CloudWatch logs if the bot is not responding.
