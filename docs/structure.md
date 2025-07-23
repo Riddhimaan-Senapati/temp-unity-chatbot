@@ -25,7 +25,11 @@
 │     └── link_cleaner.py
 ├── docs/
 │ ├── README-DEPLOYMENT.md
-│ └── structure.md
+│ ├── SLACK-SETUP.md
+│ ├── KNOWLEDGE-BASE-SETUP.md
+│ ├── structure.md
+│ └── manifests/
+│     └── (Slack app manifest files for different deployment methods)
 ├── local_testing/
 │ ├── automated_test.py
 │ ├── test_data/
@@ -33,7 +37,7 @@
 │ └── test_results/
 │   └── (stores the test results)
 ├── images/
-│ └── (stores images for use in the README and other documentation)
+│ └── (screenshots, diagrams, and visual assets for documentation)
 ├── .github/
 │ ├── pull_request_template.md
 │ └── workflows/
@@ -66,9 +70,6 @@
 │ └── slack_lambda/
 │     ├── slack_lambda.py
 │     └── requirements.txt
-│ └── slack_lambda/
-│     ├── slack_lambda.py
-│     └── requirements.txt
 ├── .dockerignore
 ├── LICENSE
 └── .gitignore
@@ -93,6 +94,7 @@
   - **`docs/SLACK-SETUP.md`**: Step-by-step guide for setting up Slack apps and configuring bot permissions.
   - **`docs/KNOWLEDGE-BASE-SETUP.md`**: Instructions for creating and configuring AWS Bedrock Knowledge Base.
   - **`docs/structure.md`**: Detailed project structure and file descriptions.
+  - **`docs/manifests/`**: Directory containing Slack app manifest files for quick app setup with pre-configured permissions and settings for different deployment methods (Lambda, ECS, and scraper configurations).
 
 ### Optional Components (For Development/Testing)
 
@@ -111,7 +113,7 @@
   - **`local_testing/test_data/`**: Test data used by automated testing scripts.
     - **`local_testing/test_data/conversation_threads.json`**: Sample conversation threads for testing.
   - **`local_testing/test_results/`**: Stores the results of automated tests.
-- **`images/`**: This directory stores the images used in the README and other documentation
+- **`images/`**: This directory stores screenshots, diagrams, and visual assets used throughout the documentation, including setup guides, architectural diagrams, and user interface examples.
 - **`lambdas/`**: This directory contains AWS Lambda functions for the core serverless functionality.
   - **`lambdas/contextual_retrieval/`**: **[REQUIRED]** AWS Lambda function for contextual retrieval
     - **`lambdas/contextual_retrieval/lambda_function.py`**: AWS Lambda function used by AWS Bedrock Knowledge Base to generate contextual summaries for document chunks and adds them to the beginning of each chunk, improving retrieval accuracy and relevance.
