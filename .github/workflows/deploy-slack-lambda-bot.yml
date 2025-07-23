@@ -39,7 +39,7 @@ jobs:
 
       - name: Deploy Infrastructure Stack
         run: |
-          STACK_NAME="unity-slack-lambda-infrastructure"
+          STACK_NAME="unity-slack-lambda-stack"
 
           echo "Deploying CloudFormation stack: $STACK_NAME"
           aws cloudformation deploy \
@@ -61,7 +61,7 @@ jobs:
       - name: Get Stack Outputs
         id: get-outputs
         run: |
-          STACK_NAME="unity-slack-lambda-infrastructure"
+          STACK_NAME="unity-slack-lambda-stack"
 
           # Get outputs from CloudFormation stack
           LAMBDA_FUNCTION_NAME=$(aws cloudformation describe-stacks \
