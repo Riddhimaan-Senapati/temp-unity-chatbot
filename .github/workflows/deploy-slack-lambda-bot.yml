@@ -53,7 +53,7 @@ jobs:
               S3BucketName="${{ secrets.S3_BUCKET_NAME }}" \
               LambdaTimeout=300 \
               LambdaMemorySize=1024 \
-              ReservedConcurrentExecutions=5 \
+              ReservedConcurrentExecutions=2 \
             --capabilities CAPABILITY_NAMED_IAM \
             --tags PROJECT=ai4cw
 
