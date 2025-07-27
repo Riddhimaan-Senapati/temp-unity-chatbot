@@ -1,4 +1,4 @@
-slack-bolt==1.23.0
+slack-bolt==1.19.0
 langchain-aws==0.2.23
 langchain-core==0.3.59
 requests==2.32.3
