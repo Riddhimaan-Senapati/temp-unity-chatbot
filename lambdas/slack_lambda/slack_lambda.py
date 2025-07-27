@@ -136,6 +136,7 @@ def process_and_respond(body, say, client, context, logger):
 
 # --- Event Handlers using decorator pattern with immediate ack ---
 
+
 @app.event("app_mention")
 def handle_app_mention_events(ack, body, say, client, context, logger):
     ack()  # Acknowledge immediately
