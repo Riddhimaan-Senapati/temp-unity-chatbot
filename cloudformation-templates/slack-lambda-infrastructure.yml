@@ -39,12 +39,14 @@ Parameters:
     MaxValue: 10240
     Description: Lambda function memory size in MB
   
-  ReservedConcurrency:
+  ReservedConcurrentExecutions:
     Type: Number
     Default: 5
     MinValue: 1
     MaxValue: 100
-    Description: Reserved concurrency for Lambda function to prevent excessive concurrent executions
+    Description: Reserved concurrent executions for Lambda function to prevent excessive concurrent executions
+  
+
 
 Resources:
   # IAM Role for Lambda
@@ -133,7 +135,7 @@ Resources:
           KNOWLEDGE_BASE_ID: !Ref KnowledgeBaseId
           S3_BUCKET_NAME: !Ref S3BucketName
           PYTHONPATH: "/opt/python:/var/runtime:/var/task"
-      ReservedConcurrency: !Ref ReservedConcurrency
+      ReservedConcurrentExecutions: !Ref ReservedConcurrentExecutions
       # Layers will be added by GitHub Actions deployment
       Tags:
         - Key: PROJECT
