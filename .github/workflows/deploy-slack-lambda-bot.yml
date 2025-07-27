@@ -54,7 +54,6 @@ jobs:
               LambdaTimeout=300 \
               LambdaMemorySize=1024 \
               ReservedConcurrentExecutions=5 \
-
             --capabilities CAPABILITY_NAMED_IAM \
             --tags PROJECT=ai4cw
 
