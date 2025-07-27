@@ -126,7 +126,6 @@ Resources:
           KNOWLEDGE_BASE_ID: !Ref KnowledgeBaseId
           S3_BUCKET_NAME: !Ref S3BucketName
           PYTHONPATH: "/opt/python:/var/runtime:/var/task"
-      ReservedConcurrentExecutions: !Ref ReservedConcurrentExecutions
       # Layers will be added by GitHub Actions deployment
       Tags:
         - Key: PROJECT
