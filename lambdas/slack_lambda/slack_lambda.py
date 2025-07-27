@@ -134,13 +134,12 @@ def process_and_respond(body, say, client, context, logger):
         )
 
 
-# --- Event Handlers using the lazy=[] parameter ---
-# This is the simplest and most robust way to handle the 3-second timeout.
-# Bolt automatically calls ack() and then runs the functions in the lazy list.
+# --- Event Handlers using decorator pattern with immediate ack ---
 
-
-# For app mentions - direct lazy listener
-app.event("app_mention", lazy=[process_and_respond])
+@app.event("app_mention")
+def handle_app_mention_events(ack, body, say, client, context, logger):
+    ack()  # Acknowledge immediately
+    process_and_respond(body, say, client, context, logger)
 
 
 # We need a middleware to filter out messages we don't want to process for the 'message' event.
@@ -167,8 +166,12 @@ def filter_unwanted_messages(body, next):
     next()
 
 
-# For direct messages (after middleware filtering) - direct lazy listener
-app.event("message", lazy=[process_and_respond])
+@app.event("message")
+def handle_message_events(ack, body, say, client, context, logger):
+    # The middleware above has already filtered out unwanted messages.
+    # If the execution reaches here, it's a valid DM to process.
+    ack()  # Acknowledge immediately
+    process_and_respond(body, say, client, context, logger)
 
 
 # --- Lambda Handler Entrypoint ---
