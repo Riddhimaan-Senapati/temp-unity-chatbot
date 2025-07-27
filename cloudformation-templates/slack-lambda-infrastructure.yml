@@ -38,6 +38,13 @@ Parameters:
     MinValue: 128
     MaxValue: 10240
     Description: Lambda function memory size in MB
+  
+  ReservedConcurrency:
+    Type: Number
+    Default: 5
+    MinValue: 1
+    MaxValue: 100
+    Description: Reserved concurrency for Lambda function to prevent excessive concurrent executions
 
 Resources:
   # IAM Role for Lambda
@@ -126,6 +133,8 @@ Resources:
           KNOWLEDGE_BASE_ID: !Ref KnowledgeBaseId
           S3_BUCKET_NAME: !Ref S3BucketName
           PYTHONPATH: "/opt/python:/var/runtime:/var/task"
+      ReservedConcurrencyConfiguration:
+        ReservedConcurrency: !Ref ReservedConcurrency
       # Layers will be added by GitHub Actions deployment
       Tags:
         - Key: PROJECT
@@ -164,10 +173,6 @@ Resources:
         Type: AWS_PROXY
         IntegrationHttpMethod: POST
         Uri: !Sub "arn:aws:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${SlackLambdaFunction.Arn}/invocations"
-        IntegrationResponses:
-          - StatusCode: 200
-      MethodResponses:
-        - StatusCode: 200
 
   # API Gateway Deployment
   SlackAPIDeployment:
@@ -184,7 +189,7 @@ Resources:
       FunctionName: !Ref SlackLambdaFunction
       Action: lambda:InvokeFunction
       Principal: apigateway.amazonaws.com
-      SourceArn: !Sub "arn:aws:execute-api:${AWS::Region}:${AWS::AccountId}:${SlackAPI}/*/POST/slack"
+      SourceArn: !Sub "arn:aws:execute-api:${AWS::Region}:${AWS::AccountId}:${SlackAPI}/*/*"
 
 
 
