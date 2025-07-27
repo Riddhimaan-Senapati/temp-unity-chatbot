@@ -198,7 +198,6 @@ jobs:
               S3_BUCKET_NAME=${{ secrets.S3_BUCKET_NAME }},
               PYTHONPATH=/opt/python:/var/runtime:/var/task
             }" \
-
             --timeout 300 \
             --memory-size 1024
 
