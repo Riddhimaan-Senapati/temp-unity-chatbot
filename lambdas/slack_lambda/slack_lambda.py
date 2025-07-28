@@ -90,8 +90,17 @@ def process_and_respond(body, say, client, context, logger):
         return
 
     try:
+        # Get bot_id from auth for proper message filtering
+        bot_id_from_auth = None
+        try:
+            auth_test = client.auth_test()
+            bot_id_from_auth = auth_test.get("bot_id")
+            logger.info(f"Lambda bot_user_id: {bot_user_id}, bot_id_from_auth: {bot_id_from_auth}")
+        except Exception as auth_e:
+            logger.warning(f"Could not get bot_id_from_auth: {auth_e}")
+        
         history = reconstruct_history_from_slack(
-            client, channel_id, thread_ts, bot_user_id
+            client, channel_id, thread_ts, bot_user_id, bot_id_from_auth
         )
         cleaned_text = user_text_raw.replace(f"<@{bot_user_id}>", "").strip()
         
@@ -99,9 +108,14 @@ def process_and_respond(body, say, client, context, logger):
         if not cleaned_text and not files:
             cleaned_text = "help"
         
+        logger.info(f"Lambda processing: cleaned_text='{cleaned_text}', files={len(files)}")
+        
         current_msg = create_multimodal_message(cleaned_text, files)
         final_history = history[:-1] + [current_msg]
+        
+        logger.info(f"Lambda calling generate_ai_response_with_tools with history length: {len(final_history)}")
         full_response = generate_ai_response_with_tools(llm, final_history, retrieve_context_tool)
+        
         say(text=full_response, thread_ts=thread_ts)
         logger.info(f"Responded to thread {thread_ts}")
     except Exception:

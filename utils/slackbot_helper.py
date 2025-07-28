@@ -180,6 +180,8 @@ def create_multimodal_message(cleaned_user_text, files):
 def generate_ai_response_with_tools(llm, final_history, retrieve_context_tool):
     """Generate AI response using LangChain tools and add disclaimer."""
     try:
+        logger.info("Starting generate_ai_response_with_tools")
+        
         # First pass: Get response potentially with tool calls
         first_pass_response_obj = llm.invoke(final_history, tools=[retrieve_context_tool], tool_choice="auto")
         
@@ -196,9 +198,12 @@ def generate_ai_response_with_tools(llm, final_history, retrieve_context_tool):
                 full_response_text = str(first_pass_response_obj.content)
         
         tool_calls_made = first_pass_response_obj.tool_calls if hasattr(first_pass_response_obj, "tool_calls") else []
+        logger.info(f"First pass response: '{full_response_text[:100]}...', Tool calls made: {len(tool_calls_made)}")
         
         # If tool calls were made, execute them and get final response
         if tool_calls_made:
+            logger.info(f"Executing {len(tool_calls_made)} tool calls")
+            
             # Add the AI message with tool calls to history
             ai_message_with_tools = AIMessage(
                 content=full_response_text,
@@ -207,10 +212,13 @@ def generate_ai_response_with_tools(llm, final_history, retrieve_context_tool):
             updated_history = final_history + [ai_message_with_tools]
             
             # Execute tool calls and add tool messages
-            for tool_call in tool_calls_made:
+            for i, tool_call in enumerate(tool_calls_made):
+                logger.info(f"Executing tool call {i+1}: {tool_call.get('name', 'unknown')} with args: {tool_call.get('args', {})}")
+                
                 if tool_call["name"] == "retrieve_context_tool":
                     tool_output = retrieve_context_tool(**tool_call["args"])
                     context = tool_output.get("context", "No context found.")
+                    logger.info(f"Tool call {i+1} returned context length: {len(context)} chars")
                     
                     # Create tool message in Bedrock format
                     tool_message = HumanMessage(
@@ -222,6 +230,10 @@ def generate_ai_response_with_tools(llm, final_history, retrieve_context_tool):
                         ]
                     )
                     updated_history.append(tool_message)
+                else:
+                    logger.warning(f"Unknown tool call: {tool_call['name']}")
+            
+            logger.info(f"Updated history length after tool execution: {len(updated_history)}")
             
             # Get final response after tool execution
             final_response_obj = llm.invoke(updated_history, tools=[retrieve_context_tool], tool_choice="auto")
@@ -237,11 +249,16 @@ def generate_ai_response_with_tools(llm, final_history, retrieve_context_tool):
                     response_content = " ".join(text_parts)
                 else:
                     response_content = str(final_response_obj.content)
+            
+            logger.info(f"Final response after tool execution: '{response_content[:100]}...'")
         else:
+            logger.info("No tool calls made, using first pass response")
             response_content = full_response_text
         
         disclaimer = "\n\n* *Generative AI is experimental. Please verify answers using official documentation.*"
-        return response_content + disclaimer
+        final_result = response_content + disclaimer
+        logger.info(f"Returning final response length: {len(final_result)} chars")
+        return final_result
         
     except Exception as e:
         logger.error(f"Error in generate_ai_response_with_tools: {e}", exc_info=True)
