@@ -5,9 +5,9 @@ import os
 import base64
 import requests
 from langchain_core.messages import AIMessage, HumanMessage, SystemMessage
+from langchain_core.documents import Document
 from utils.prompts import (
-    question_system_prompt,
-    slack_system_prompt_with_followups as slack_system_prompt,
+    slack_system_prompt_with_tools as slack_system_prompt,
 )
 
 logger = logging.getLogger(__name__)
@@ -140,56 +140,35 @@ def reconstruct_history_from_slack(
     return history
 
 
-def create_optimized_query(llm, current_thread_history, query_prompt_text):
-    """Create an optimized search query using the LLM."""
-    # For query optimization, use a text-only representation of the history.
-    text_only_history = [SystemMessage(content=question_system_prompt)]
-    if len(current_thread_history) > 1:  # If there's more than the system prompt
-        for msg in current_thread_history[1:]:  # Skip system prompt
-            text_only_history.append(
-                HumanMessage(content=get_text_from_message(msg))
-                if isinstance(msg, HumanMessage)
-                else msg
-            )
-
-    # Construct messages for the query optimization LLM call
-    messages_for_query_optimization_llm = text_only_history[
-        :-1
-    ]  # History up to before the current turn
-    messages_for_query_optimization_llm.append(
-        HumanMessage(
-            content=f'Based on the conversation history (if any), generate an optimized search query for the following user question: "{query_prompt_text}"'
-        )
-    )
-
-    try:
-        # Get the optimized query from the LLM based on text
-        query_response = llm.invoke(messages_for_query_optimization_llm)
-        optimized_query = query_response.content.strip()
-        logger.info(f"Generated optimized query: '{optimized_query}'")
-        return optimized_query if optimized_query else query_prompt_text
-    except Exception as e:
-        logger.error(f"Error generating optimized query: {e}")
-        return query_prompt_text
+def create_retrieve_context_tool(retriever):
+    """Create the retrieve_context tool for LangChain."""
+    def retrieve_context_tool(query: str):
+        from utils.chatbot_helper import retrieve_context
+        logger.info(f"retrieve_context_tool: Retrieving context for query: '{query}'")
+        context, relevant_docs = retrieve_context(retriever=retriever, prompt=query)
+        # Convert relevant_docs to a serializable format
+        serializable_docs = []
+        for doc in relevant_docs:
+            serializable_docs.append({
+                "page_content": doc.page_content,
+                "metadata": doc.metadata
+            })
+        return {"context": context, "relevant_docs": serializable_docs}
+    
+    return retrieve_context_tool
 
 
-def create_multimodal_message(cleaned_user_text, context, files):
+def create_multimodal_message(cleaned_user_text, files):
     """Create a multimodal message with text and images."""
     current_turn_content_parts = []
 
     if cleaned_user_text:
-        # The augmented prompt combines RAG context with the user's text
-        augmented_text_prompt = f"Context:\n{context}\n\nQuestion: {cleaned_user_text}"
         current_turn_content_parts.append(
-            {"type": "text", "text": augmented_text_prompt}
+            {"type": "text", "text": cleaned_user_text}
         )
-    else:  # If there was no text, we still want to provide the RAG context
-        augmented_text_prompt_for_image = (
-            f"Context:\n{context}\n\n"
-            "User question regarding the following image(s): Describe the image(s) and relate them to the provided context if possible."
-        )
+    else:  # If there was no text but there are images
         current_turn_content_parts.append(
-            {"type": "text", "text": augmented_text_prompt_for_image}
+            {"type": "text", "text": "Please help me with the following image(s):"}
         )
 
     # Process and add images from the current message
@@ -198,11 +177,51 @@ def create_multimodal_message(cleaned_user_text, context, files):
     return HumanMessage(content=current_turn_content_parts)
 
 
-def generate_ai_response(llm, final_history):
-    """Generate AI response and add disclaimer."""
-    ai_response = llm.invoke(final_history)
-    ai_message_content = (
-        ai_response.content if hasattr(ai_response, "content") else str(ai_response)
-    )
-    disclaimer = "\n\n* *Generative AI is experimental. Please verify answers using official documentation.*"
-    return ai_message_content + disclaimer
+def generate_ai_response_with_tools(llm, final_history, retrieve_context_tool):
+    """Generate AI response using LangChain tools and add disclaimer."""
+    try:
+        # First pass: Get response potentially with tool calls
+        first_pass_response_obj = llm.invoke(final_history, tools=[retrieve_context_tool], tool_choice="auto")
+        
+        full_response_text = first_pass_response_obj.content if first_pass_response_obj.content else ""
+        tool_calls_made = first_pass_response_obj.tool_calls if hasattr(first_pass_response_obj, "tool_calls") else []
+        
+        # If tool calls were made, execute them and get final response
+        if tool_calls_made:
+            # Add the AI message with tool calls to history
+            ai_message_with_tools = AIMessage(
+                content=full_response_text,
+                tool_calls=tool_calls_made
+            )
+            updated_history = final_history + [ai_message_with_tools]
+            
+            # Execute tool calls and add tool messages
+            for tool_call in tool_calls_made:
+                if tool_call["name"] == "retrieve_context_tool":
+                    tool_output = retrieve_context_tool(**tool_call["args"])
+                    context = tool_output.get("context", "No context found.")
+                    
+                    # Create tool message in Bedrock format
+                    tool_message = HumanMessage(
+                        content=[
+                            {"toolResult": {
+                                "toolUseId": tool_call["id"],
+                                "content": [{"text": context}]
+                            }}
+                        ]
+                    )
+                    updated_history.append(tool_message)
+            
+            # Get final response after tool execution
+            # Use invoke instead of stream for non-streaming behavior
+            final_response_obj = llm.invoke(updated_history, tools=[retrieve_context_tool], tool_choice="auto")
+            response_content = final_response_obj.content if final_response_obj.content else ""
+        else:
+            response_content = full_response_text
+        
+        disclaimer = "\n\n* *Generative AI is experimental. Please verify answers using official documentation.*"
+        return response_content + disclaimer
+        
+    except Exception as e:
+        logger.error(f"Error in generate_ai_response_with_tools: {e}", exc_info=True)
+        return "Sorry, I encountered an error while generating the response."

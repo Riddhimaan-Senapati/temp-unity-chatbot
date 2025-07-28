@@ -15,9 +15,9 @@ from utils.chatbot_helper import (
 )
 from utils.slackbot_helper import (
     reconstruct_history_from_slack,
-    create_optimized_query,
     create_multimodal_message,
-    generate_ai_response,
+    generate_ai_response_with_tools,
+    create_retrieve_context_tool,
 )
 
 # Load environment variables (for local development)
@@ -40,15 +40,17 @@ app = App(
 bedrock_client = None
 llm = None
 retriever = None
+retrieve_context_tool = None
 
 
 def initialize_clients():
-    global bedrock_client, llm, retriever
+    global bedrock_client, llm, retriever, retrieve_context_tool
     if bedrock_client is None:
-        logger.info("Cold start: initializing Bedrock, LLM & retriever")
+        logger.info("Cold start: initializing Bedrock, LLM, retriever & tools")
         bedrock_client = initialize_bedrock_client()
         llm = initialize_llm(client=bedrock_client)
         retriever = initialize_knowledge_base_retriever()
+        retrieve_context_tool = create_retrieve_context_tool(retriever)
         logger.info("Initialization complete.")
 
 
@@ -73,7 +75,7 @@ def skip_retry_middleware(body, req, next):
 def process_and_respond(body, say, client, context, logger):
     logger.info("Lazy listener: process_and_respond invoked")
     initialize_clients()
-    if not (llm and retriever):
+    if not (llm and retriever and retrieve_context_tool):
         say("The AI components are not available. Please contact an administrator.")
         return
 
@@ -92,14 +94,14 @@ def process_and_respond(body, say, client, context, logger):
             client, channel_id, thread_ts, bot_user_id
         )
         cleaned_text = user_text_raw.replace(f"<@{bot_user_id}>", "").strip()
-        prompt_text = cleaned_text or (
-            "Describe the attached image(s)." if files else "help"
-        )
-        optimized_q = create_optimized_query(llm, history, prompt_text)
-        context_data, _ = retrieve_context(retriever=retriever, prompt=optimized_q)
-        current_msg = create_multimodal_message(cleaned_text, context_data, files)
+        
+        # Handle empty messages
+        if not cleaned_text and not files:
+            cleaned_text = "help"
+        
+        current_msg = create_multimodal_message(cleaned_text, files)
         final_history = history[:-1] + [current_msg]
-        full_response = generate_ai_response(llm, final_history)
+        full_response = generate_ai_response_with_tools(llm, final_history, retrieve_context_tool)
         say(text=full_response, thread_ts=thread_ts)
         logger.info(f"Responded to thread {thread_ts}")
     except Exception:

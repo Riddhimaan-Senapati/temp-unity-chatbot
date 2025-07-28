@@ -24,9 +24,9 @@ from utils.chatbot_helper import (
 
 from utils.slackbot_helper import (
     reconstruct_history_from_slack,
-    create_optimized_query,
     create_multimodal_message,
-    generate_ai_response,
+    generate_ai_response_with_tools,
+    create_retrieve_context_tool,
 )
 
 # Load Environment Variables
@@ -75,13 +75,16 @@ try:
     llm = initialize_llm(client=bedrock_client)
     # initialize Knowledge Base retriever
     retriever = initialize_knowledge_base_retriever()
-    logger.info("Bedrock client, LLM, and Retriever initialized successfully.")
+    # Create the retrieve_context tool
+    retrieve_context_tool = create_retrieve_context_tool(retriever)
+    logger.info("Bedrock client, LLM, Retriever, and tools initialized successfully.")
 except Exception as e:
     logger.error(
         f"Error initializing AWS services or LangChain components: {e}", exc_info=True
     )
     llm = None
     retriever = None
+    retrieve_context_tool = None
 
 # Bot User ID
 bot_user_id = None
@@ -104,8 +107,8 @@ except Exception as e:
 def process_user_message_with_slack_history(
     client, channel_id, thread_ts_key, current_user_text_raw, files=None
 ):
-    if not llm or not retriever:
-        logger.error("LLM or Retriever not initialized. Cannot process message.")
+    if not llm or not retriever or not retrieve_context_tool:
+        logger.error("LLM, Retriever, or tools not initialized. Cannot process message.")
         return "Sorry, the AI service is currently unavailable. Please check the logs or contact an administrator."
 
     logger.info(
@@ -117,45 +120,24 @@ def process_user_message_with_slack_history(
         client, channel_id, thread_ts_key, bot_user_id, bot_id_from_auth
     )
 
-    # Clean user text and determine query
+    # Clean user text
     cleaned_current_user_text = (
         current_user_text_raw.replace(f"<@{bot_user_id}>", "").strip()
         if bot_user_id
         else current_user_text_raw.strip()
     )
 
-    # Determine prompt for query optimization
-    query_prompt_text = cleaned_current_user_text
+    # Handle empty messages
     if not cleaned_current_user_text and not files:
         logger.warning(
-            f"User message for thread {thread_ts_key} was empty. Using 'help' as query."
+            f"User message for thread {thread_ts_key} was empty. Using default help message."
         )
-        query_prompt_text = "help"
-    elif not cleaned_current_user_text and files:
-        query_prompt_text = (
-            "Describe the attached image(s) in the context of our documentation."
-        )
+        cleaned_current_user_text = "help"
 
     try:
-        # Create optimized query using shared helper
-        optimized_query = create_optimized_query(
-            llm, current_thread_history, query_prompt_text
-        )
-        logger.info(
-            f"Generated optimized query for thread {thread_ts_key}: '{optimized_query}'"
-        )
-
-        # Retrieve context from knowledge base
-        context, relevant_docs = retrieve_context(
-            retriever=retriever, prompt=optimized_query
-        )
-        logger.debug(
-            f"Retrieved context for thread {thread_ts_key} (first 100 chars): {str(context)[:100]}"
-        )
-
         # Create multimodal message using shared helper
         current_turn_human_message = create_multimodal_message(
-            cleaned_current_user_text, context, files
+            cleaned_current_user_text, files
         )
 
         # The final history for the main LLM is the history up to the last turn, plus the new multimodal message
@@ -166,12 +148,11 @@ def process_user_message_with_slack_history(
         logger.info(
             f"Sending to main LLM for thread {thread_ts_key}. Final history length: {len(final_history_for_main_llm)} messages."
         )
-        logger.debug(
-            f"Final history for main LLM (thread {thread_ts_key}): {final_history_for_main_llm}"
-        )
 
-        # Generate AI response using shared helper
-        full_response = generate_ai_response(llm, final_history_for_main_llm)
+        # Generate AI response using tools
+        full_response = generate_ai_response_with_tools(
+            llm, final_history_for_main_llm, retrieve_context_tool
+        )
         logger.info(f"LLM response for thread {thread_ts_key}: Generated successfully")
         return full_response
     except Exception as e:
@@ -353,9 +334,9 @@ if __name__ == "__main__":
         )
         exit(1)
 
-    if not llm or not retriever:
+    if not llm or not retriever or not retrieve_context_tool:
         logger.error(
-            "LLM or Retriever failed to initialize. Bot will have limited or no AI capabilities."
+            "LLM, Retriever, or tools failed to initialize. Bot will have limited or no AI capabilities."
         )
     if not bot_user_id:
         logger.error(
