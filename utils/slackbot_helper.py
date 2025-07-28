@@ -5,7 +5,6 @@ import os
 import base64
 import requests
 from langchain_core.messages import AIMessage, HumanMessage, SystemMessage
-from langchain_core.documents import Document
 from utils.prompts import (
     slack_system_prompt_with_tools as slack_system_prompt,
 )
@@ -142,19 +141,20 @@ def reconstruct_history_from_slack(
 
 def create_retrieve_context_tool(retriever):
     """Create the retrieve_context tool for LangChain."""
+
     def retrieve_context_tool(query: str):
         from utils.chatbot_helper import retrieve_context
+
         logger.info(f"retrieve_context_tool: Retrieving context for query: '{query}'")
         context, relevant_docs = retrieve_context(retriever=retriever, prompt=query)
         # Convert relevant_docs to a serializable format
         serializable_docs = []
         for doc in relevant_docs:
-            serializable_docs.append({
-                "page_content": doc.page_content,
-                "metadata": doc.metadata
-            })
+            serializable_docs.append(
+                {"page_content": doc.page_content, "metadata": doc.metadata}
+            )
         return {"context": context, "relevant_docs": serializable_docs}
-    
+
     return retrieve_context_tool
 
 
@@ -163,9 +163,7 @@ def create_multimodal_message(cleaned_user_text, files):
     current_turn_content_parts = []
 
     if cleaned_user_text:
-        current_turn_content_parts.append(
-            {"type": "text", "text": cleaned_user_text}
-        )
+        current_turn_content_parts.append({"type": "text", "text": cleaned_user_text})
     else:  # If there was no text but there are images
         current_turn_content_parts.append(
             {"type": "text", "text": "Please help me with the following image(s):"}
@@ -181,10 +179,12 @@ def generate_ai_response_with_tools(llm, final_history, retrieve_context_tool):
     """Generate AI response using LangChain tools and add disclaimer."""
     try:
         logger.info("Starting generate_ai_response_with_tools")
-        
+
         # First pass: Get response potentially with tool calls
-        first_pass_response_obj = llm.invoke(final_history, tools=[retrieve_context_tool], tool_choice="auto")
-        
+        first_pass_response_obj = llm.invoke(
+            final_history, tools=[retrieve_context_tool], tool_choice="auto"
+        )
+
         # Handle content that might be a string or list
         full_response_text = ""
         if first_pass_response_obj.content:
@@ -192,52 +192,71 @@ def generate_ai_response_with_tools(llm, final_history, retrieve_context_tool):
                 full_response_text = first_pass_response_obj.content
             elif isinstance(first_pass_response_obj.content, list):
                 # Extract text from multimodal content
-                text_parts = [part.get("text", "") for part in first_pass_response_obj.content if isinstance(part, dict) and part.get("type") == "text"]
+                text_parts = [
+                    part.get("text", "")
+                    for part in first_pass_response_obj.content
+                    if isinstance(part, dict) and part.get("type") == "text"
+                ]
                 full_response_text = " ".join(text_parts)
             else:
                 full_response_text = str(first_pass_response_obj.content)
-        
-        tool_calls_made = first_pass_response_obj.tool_calls if hasattr(first_pass_response_obj, "tool_calls") else []
-        logger.info(f"First pass response: '{full_response_text[:100]}...', Tool calls made: {len(tool_calls_made)}")
-        
+
+        tool_calls_made = (
+            first_pass_response_obj.tool_calls
+            if hasattr(first_pass_response_obj, "tool_calls")
+            else []
+        )
+        logger.info(
+            f"First pass response: '{full_response_text[:100]}...', Tool calls made: {len(tool_calls_made)}"
+        )
+
         # If tool calls were made, execute them and get final response
         if tool_calls_made:
             logger.info(f"Executing {len(tool_calls_made)} tool calls")
-            
+
             # Add the AI message with tool calls to history
             ai_message_with_tools = AIMessage(
-                content=full_response_text,
-                tool_calls=tool_calls_made
+                content=full_response_text, tool_calls=tool_calls_made
             )
             updated_history = final_history + [ai_message_with_tools]
-            
+
             # Execute tool calls and add tool messages
             for i, tool_call in enumerate(tool_calls_made):
-                logger.info(f"Executing tool call {i+1}: {tool_call.get('name', 'unknown')} with args: {tool_call.get('args', {})}")
-                
+                logger.info(
+                    f"Executing tool call {i + 1}: {tool_call.get('name', 'unknown')} with args: {tool_call.get('args', {})}"
+                )
+
                 if tool_call["name"] == "retrieve_context_tool":
                     tool_output = retrieve_context_tool(**tool_call["args"])
                     context = tool_output.get("context", "No context found.")
-                    logger.info(f"Tool call {i+1} returned context length: {len(context)} chars")
-                    
+                    logger.info(
+                        f"Tool call {i + 1} returned context length: {len(context)} chars"
+                    )
+
                     # Create tool message in Bedrock format
                     tool_message = HumanMessage(
                         content=[
-                            {"toolResult": {
-                                "toolUseId": tool_call["id"],
-                                "content": [{"text": context}]
-                            }}
+                            {
+                                "toolResult": {
+                                    "toolUseId": tool_call["id"],
+                                    "content": [{"text": context}],
+                                }
+                            }
                         ]
                     )
                     updated_history.append(tool_message)
                 else:
                     logger.warning(f"Unknown tool call: {tool_call['name']}")
-            
-            logger.info(f"Updated history length after tool execution: {len(updated_history)}")
-            
+
+            logger.info(
+                f"Updated history length after tool execution: {len(updated_history)}"
+            )
+
             # Get final response after tool execution
-            final_response_obj = llm.invoke(updated_history, tools=[retrieve_context_tool], tool_choice="auto")
-            
+            final_response_obj = llm.invoke(
+                updated_history, tools=[retrieve_context_tool], tool_choice="auto"
+            )
+
             # Handle final response content that might be a string or list
             response_content = ""
             if final_response_obj.content:
@@ -245,21 +264,27 @@ def generate_ai_response_with_tools(llm, final_history, retrieve_context_tool):
                     response_content = final_response_obj.content
                 elif isinstance(final_response_obj.content, list):
                     # Extract text from multimodal content
-                    text_parts = [part.get("text", "") for part in final_response_obj.content if isinstance(part, dict) and part.get("type") == "text"]
+                    text_parts = [
+                        part.get("text", "")
+                        for part in final_response_obj.content
+                        if isinstance(part, dict) and part.get("type") == "text"
+                    ]
                     response_content = " ".join(text_parts)
                 else:
                     response_content = str(final_response_obj.content)
-            
-            logger.info(f"Final response after tool execution: '{response_content[:100]}...'")
+
+            logger.info(
+                f"Final response after tool execution: '{response_content[:100]}...'"
+            )
         else:
             logger.info("No tool calls made, using first pass response")
             response_content = full_response_text
-        
+
         disclaimer = "\n\n* *Generative AI is experimental. Please verify answers using official documentation.*"
         final_result = response_content + disclaimer
         logger.info(f"Returning final response length: {len(final_result)} chars")
         return final_result
-        
+
     except Exception as e:
         logger.error(f"Error in generate_ai_response_with_tools: {e}", exc_info=True)
         return "Sorry, I encountered an error while generating the response."

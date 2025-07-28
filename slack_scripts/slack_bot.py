@@ -18,7 +18,6 @@ from utils.chatbot_helper import (
     initialize_bedrock_client,
     initialize_knowledge_base_retriever,
     initialize_llm,
-    retrieve_context,
 )
 
 
@@ -28,6 +27,9 @@ from utils.slackbot_helper import (
     generate_ai_response_with_tools,
     create_retrieve_context_tool,
 )
+
+# set source count(how many chunks to retrieve)
+SOURCE_COUNT = 10
 
 # Load Environment Variables
 load_dotenv()
@@ -74,7 +76,7 @@ try:
     # IMPORTANT: Ensure this initializes a multimodal model, e.g., Claude 3 Sonnet
     llm = initialize_llm(client=bedrock_client)
     # initialize Knowledge Base retriever
-    retriever = initialize_knowledge_base_retriever()
+    retriever = initialize_knowledge_base_retriever(source_count=SOURCE_COUNT)
     # Create the retrieve_context tool
     retrieve_context_tool = create_retrieve_context_tool(retriever)
     logger.info("Bedrock client, LLM, Retriever, and tools initialized successfully.")
@@ -108,7 +110,9 @@ def process_user_message_with_slack_history(
     client, channel_id, thread_ts_key, current_user_text_raw, files=None
 ):
     if not llm or not retriever or not retrieve_context_tool:
-        logger.error("LLM, Retriever, or tools not initialized. Cannot process message.")
+        logger.error(
+            "LLM, Retriever, or tools not initialized. Cannot process message."
+        )
         return "Sorry, the AI service is currently unavailable. Please check the logs or contact an administrator."
 
     logger.info(

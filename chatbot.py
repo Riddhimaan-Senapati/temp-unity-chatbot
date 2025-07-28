@@ -11,9 +11,13 @@ from utils.chatbot_helper import (
     retrieve_context,
 )
 from utils.feedback import display_feedback_form, display_feedback_form_for_sources
-from langchain_core.documents import Document # Moved import to top
-from langchain_core.messages import ToolMessage # Import ToolMessage
-from langchain_core.messages import SystemMessage, HumanMessage, AIMessage # Added for LangChain BaseMessage
+from langchain_core.documents import Document  # Moved import to top
+from langchain_core.messages import ToolMessage  # Import ToolMessage
+from langchain_core.messages import (
+    SystemMessage,
+    HumanMessage,
+    AIMessage,
+)  # Added for LangChain BaseMessage
 
 from utils.prompts import main_system_prompt_with_tools
 
@@ -108,6 +112,7 @@ llm = initialize_llm(client=bedrock_client)
 logger.info("Initializing Knowledge Base retriever...")
 retriever = initialize_knowledge_base_retriever(source_count)
 
+
 # Define the tool-compatible wrapper for retrieve_context
 def retrieve_context_tool(query: str):
     logger.info(f"retrieve_context_tool called with query: '{query}'")
@@ -118,25 +123,27 @@ def retrieve_context_tool(query: str):
     # you might need to convert them to dictionaries or a simpler structure.
     serializable_docs = []
     for doc in relevant_docs:
-        serializable_docs.append({
-            "page_content": doc.page_content,
-            "metadata": doc.metadata
-        })
+        serializable_docs.append(
+            {"page_content": doc.page_content, "metadata": doc.metadata}
+        )
     return {"context": context, "relevant_docs": serializable_docs}
+
 
 if "messages" not in st.session_state:
     st.session_state.messages = []
     # Log when initial system prompt is added to messages
     logger.info("Initializing chat messages with main system prompt.")
     # Add the system prompt to the beginning of the messages
-    st.session_state.messages.append(SystemMessage(content=main_system_prompt_with_tools))
+    st.session_state.messages.append(
+        SystemMessage(content=main_system_prompt_with_tools)
+    )
 
 # store messages for short-term memory
 # displays all messages, except the first one which is a system prompt
 for i, message in enumerate(st.session_state.messages):
-    if message.type == "system": # Access type attribute directly
+    if message.type == "system":  # Access type attribute directly
         continue
-    
+
     # Determine the role for st.chat_message display
     display_role = "user" if message.type == "human" else message.type
     with st.chat_message(display_role):
@@ -156,60 +163,103 @@ for i, message in enumerate(st.session_state.messages):
 
         # Display sources if they exist in the message
         if (
-            message.type == "assistant" # Access type attribute directly
+            message.type == "assistant"  # Access type attribute directly
             and hasattr(message, "sources")
             and message.sources
         ):
             st.markdown("---")
             st.markdown("**Sources**")
             for j, doc in enumerate(message.sources):
-                if isinstance(doc, Document): # Defensive check
+                if isinstance(doc, Document):  # Defensive check
                     with st.expander(f"🔍 Source {j + 1}"):
                         st.text(doc.page_content)
                         # Add source-specific feedback form
                         source_unique_key = f"{len(st.session_state.messages)}_source_{j}_{hash(doc.page_content) % 10000}"
                         # For historical messages, get the user question from the previous message
                         user_question = "N/A"  # Default
-                        if j > 0 and st.session_state.messages[j - 1].type == "human": # Access type attribute directly
-                            user_question = st.session_state.messages[j - 1].content # Access content attribute directly
-                        
+                        if (
+                            j > 0 and st.session_state.messages[j - 1].type == "human"
+                        ):  # Access type attribute directly
+                            user_question = st.session_state.messages[
+                                j - 1
+                            ].content  # Access content attribute directly
+
                         # Ensure response_content is always a string for feedback form
-                        response_content_for_feedback_sources = message.content # Access content attribute directly
-                        if isinstance(response_content_for_feedback_sources, ToolMessage):
-                            response_content_for_feedback_sources = response_content_for_feedback_sources.content
+                        response_content_for_feedback_sources = (
+                            message.content
+                        )  # Access content attribute directly
+                        if isinstance(
+                            response_content_for_feedback_sources, ToolMessage
+                        ):
+                            response_content_for_feedback_sources = (
+                                response_content_for_feedback_sources.content
+                            )
                         elif isinstance(response_content_for_feedback_sources, list):
                             # For multimodal content, join text parts or convert to string
-                            text_parts = [p["text"] for p in response_content_for_feedback_sources if p["type"] == "text"]
-                            response_content_for_feedback_sources = " ".join(text_parts) if text_parts else str(response_content_for_feedback_sources)
+                            text_parts = [
+                                p["text"]
+                                for p in response_content_for_feedback_sources
+                                if p["type"] == "text"
+                            ]
+                            response_content_for_feedback_sources = (
+                                " ".join(text_parts)
+                                if text_parts
+                                else str(response_content_for_feedback_sources)
+                            )
 
                         display_feedback_form_for_sources(
-                            user_question, response_content_for_feedback_sources, doc, source_unique_key
+                            user_question,
+                            response_content_for_feedback_sources,
+                            doc,
+                            source_unique_key,
                         )
                 else:
-                    logger.error(f"Unexpected object in relevant_docs: {type(doc)}. Expected Document.")
-                    st.markdown(f"**Source {j + 1}: [Content not available - unexpected format]**")
+                    logger.error(
+                        f"Unexpected object in relevant_docs: {type(doc)}. Expected Document."
+                    )
+                    st.markdown(
+                        f"**Source {j + 1}: [Content not available - unexpected format]**"
+                    )
 
         # Add feedback form for assistant messages in chat history
         if (
-            message.type == "assistant" and i > 1 # Access type attribute directly
+            message.type == "assistant" and i > 1  # Access type attribute directly
         ):  # Skip system message and ensure there's a preceding user message
             user_message = "N/A"  # Default
-            if i > 0 and st.session_state.messages[i - 1].type == "human": # Access type attribute directly
-                user_message = st.session_state.messages[i - 1].content # Access content attribute directly
-            
+            if (
+                i > 0 and st.session_state.messages[i - 1].type == "human"
+            ):  # Access type attribute directly
+                user_message = st.session_state.messages[
+                    i - 1
+                ].content  # Access content attribute directly
+
             # Ensure response_content is always a string for feedback form
-            response_content_for_feedback = message.content # Access content attribute directly
+            response_content_for_feedback = (
+                message.content
+            )  # Access content attribute directly
             if isinstance(response_content_for_feedback, ToolMessage):
                 response_content_for_feedback = response_content_for_feedback.content
             elif isinstance(response_content_for_feedback, list):
                 # For multimodal content, join text parts or convert to string
-                text_parts = [p["text"] for p in response_content_for_feedback if p["type"] == "text"]
-                response_content_for_feedback = " ".join(text_parts) if text_parts else str(response_content_for_feedback)
+                text_parts = [
+                    p["text"]
+                    for p in response_content_for_feedback
+                    if p["type"] == "text"
+                ]
+                response_content_for_feedback = (
+                    " ".join(text_parts)
+                    if text_parts
+                    else str(response_content_for_feedback)
+                )
 
             # Robust hashing for unique_key
-            content_to_hash = response_content_for_feedback # Use the potentially converted string
+            content_to_hash = (
+                response_content_for_feedback  # Use the potentially converted string
+            )
             unique_key = f"history_{i}_{hash(content_to_hash) % 10000}"
-            display_feedback_form(user_message, response_content_for_feedback, unique_key)
+            display_feedback_form(
+                user_message, response_content_for_feedback, unique_key
+            )
 
 # Image upload widget
 uploaded_files = st.file_uploader(
@@ -258,12 +308,10 @@ if prompt := st.chat_input("What is up?"):
 
     # Store message with multimodal content using HumanMessage
     user_message = HumanMessage(
-        content=message_content_parts
-        if len(message_content_parts) > 1
-        else prompt,
+        content=message_content_parts if len(message_content_parts) > 1 else prompt,
         additional_kwargs={
             "images": uploaded_files if uploaded_files else None
-        }, # Store images in additional_kwargs
+        },  # Store images in additional_kwargs
     )
     st.session_state.messages.append(user_message)
 
@@ -275,16 +323,20 @@ if prompt := st.chat_input("What is up?"):
                 if part["type"] == "text":
                     st.markdown(part["text"])
         # Display uploaded images from additional_kwargs
-        if "images" in user_message.additional_kwargs and user_message.additional_kwargs["images"]:
+        if (
+            "images" in user_message.additional_kwargs
+            and user_message.additional_kwargs["images"]
+        ):
             for uploaded_file in user_message.additional_kwargs["images"]:
                 st.image(uploaded_file, caption=uploaded_file.name, width=300)
 
     with st.chat_message("assistant"):
         with st.spinner(text="Searching documentation..."):
-            
             # Use all messages as BaseMessage objects for the initial LLM call
             messages_for_llm_first_pass = [m for m in st.session_state.messages]
-            logger.debug(f"Messages for LLM (first pass): {messages_for_llm_first_pass}")
+            logger.debug(
+                f"Messages for LLM (first pass): {messages_for_llm_first_pass}"
+            )
 
         with st.spinner(text="Generating response..."):
             placeholder = st.empty()
@@ -294,19 +346,23 @@ if prompt := st.chat_input("What is up?"):
 
             try:
                 # First pass: Get response potentially with tool calls
-                for chunk in llm.stream(messages_for_llm_first_pass, tools=[retrieve_context_tool], tool_choice="auto"):
+                for chunk in llm.stream(
+                    messages_for_llm_first_pass,
+                    tools=[retrieve_context_tool],
+                    tool_choice="auto",
+                ):
                     if chunk.text:
                         full_ai_response_text += chunk.text()
                         placeholder.markdown(full_ai_response_text)
                     if hasattr(chunk, "tool_calls") and chunk.tool_calls:
                         full_ai_tool_calls.extend(chunk.tool_calls)
                         # Break if tool calls are detected, as the LLM is waiting for tool output
-                        break 
-                
+                        break
+
                 # Construct the AI message (even if incomplete, with tool calls) and append to history
                 ai_message_from_first_pass = AIMessage(
-                    content=full_ai_response_text, 
-                    tool_calls=full_ai_tool_calls if full_ai_tool_calls else None
+                    content=full_ai_response_text,
+                    tool_calls=full_ai_tool_calls if full_ai_tool_calls else None,
                 )
                 st.session_state.messages.append(ai_message_from_first_pass)
 
@@ -315,53 +371,87 @@ if prompt := st.chat_input("What is up?"):
                     tool_messages = []
                     for tool_call in full_ai_tool_calls:
                         if tool_call["name"] == "retrieve_context_tool":
-                            tool_output_dict = retrieve_context_tool(**tool_call["args"])
+                            tool_output_dict = retrieve_context_tool(
+                                **tool_call["args"]
+                            )
                             # We'll put the context string as content for the ToolMessage
-                            tool_message_content = tool_output_dict.get("context", "No context found.")
-                            
+                            tool_message_content = tool_output_dict.get(
+                                "context", "No context found."
+                            )
+
                             # Construct Bedrock-specific toolResult structure within a HumanMessage
-                            tool_messages.append(HumanMessage(
-                                content=[
-                                    {"toolResult": {
-                                        "toolUseId": tool_call["id"],
-                                        "content": [{"text": tool_message_content}]
-                                    }}
+                            tool_messages.append(
+                                HumanMessage(
+                                    content=[
+                                        {
+                                            "toolResult": {
+                                                "toolUseId": tool_call["id"],
+                                                "content": [
+                                                    {"text": tool_message_content}
+                                                ],
+                                            }
+                                        }
+                                    ]
+                                )
+                            )
+                            relevant_docs.extend(
+                                [
+                                    Document(
+                                        page_content=d["page_content"],
+                                        metadata=d["metadata"],
+                                    )
+                                    for d in tool_output_dict.get("relevant_docs", [])
                                 ]
-                            ))
-                            relevant_docs.extend([Document(page_content=d['page_content'], metadata=d['metadata']) for d in tool_output_dict.get("relevant_docs", [])])
+                            )
                         else:
                             # Handle unknown tool or other tools if they were added
-                            tool_messages.append(HumanMessage(
-                                content=[
-                                    {"toolResult": {
-                                        "toolUseId": tool_call["id"],
-                                        "content": [{"text": "Error: Unknown tool or unsupported tool execution."}]
-                                    }}
-                                ]
-                            ))
-                    
+                            tool_messages.append(
+                                HumanMessage(
+                                    content=[
+                                        {
+                                            "toolResult": {
+                                                "toolUseId": tool_call["id"],
+                                                "content": [
+                                                    {
+                                                        "text": "Error: Unknown tool or unsupported tool execution."
+                                                    }
+                                                ],
+                                            }
+                                        }
+                                    ]
+                                )
+                            )
+
                     # Append the tool messages to session state (which now includes the AIMessage with tool_calls)
                     st.session_state.messages.extend(tool_messages)
-                    
+
                     # Now, make the second LLM call to get the final answer, including streaming it
                     logger.info("Re-invoking LLM with tool results.")
                     # Use the updated session state messages for the second pass
-                    messages_for_llm_second_pass = [m for m in st.session_state.messages] 
+                    messages_for_llm_second_pass = [
+                        m for m in st.session_state.messages
+                    ]
 
                     # Clear placeholder for fresh streaming from second pass
-                    placeholder = st.empty() 
+                    placeholder = st.empty()
                     final_response_text = ""
 
-                    for chunk in llm.stream(messages_for_llm_second_pass, tools=[retrieve_context_tool], tool_choice="auto"):
+                    for chunk in llm.stream(
+                        messages_for_llm_second_pass,
+                        tools=[retrieve_context_tool],
+                        tool_choice="auto",
+                    ):
                         if chunk.text:
                             final_response_text += chunk.text()
                             placeholder.markdown(final_response_text)
                         # No more tool calls expected in this simple two-pass
                         # If more tool calls were to be handled, this would become recursive.
 
-                    response = final_response_text # Final response is from the second pass
+                    response = (
+                        final_response_text  # Final response is from the second pass
+                    )
                 else:
-                    response = full_ai_response_text # If no tool calls, response is just first pass text
+                    response = full_ai_response_text  # If no tool calls, response is just first pass text
 
                 logger.info(
                     f"Full LLM response received (length: {len(response)}): '{response}...'"
@@ -385,15 +475,28 @@ if prompt := st.chat_input("What is up?"):
                     with st.expander(f"🔍 Source {i_doc + 1}"):
                         st.text(doc.page_content)
                         source_unique_key = f"{len(st.session_state.messages)}_source_{i_doc}_{hash(doc.page_content) % 10000}"
-                        user_question_for_sources_feedback = user_message.content if isinstance(user_message.content, str) else str(user_message.content) # Ensure string
-                        response_content_for_feedback_sources = response if isinstance(response, str) else str(response) # Ensure string
+                        user_question_for_sources_feedback = (
+                            user_message.content
+                            if isinstance(user_message.content, str)
+                            else str(user_message.content)
+                        )  # Ensure string
+                        response_content_for_feedback_sources = (
+                            response if isinstance(response, str) else str(response)
+                        )  # Ensure string
                         display_feedback_form_for_sources(
-                            user_question_for_sources_feedback, response_content_for_feedback_sources, doc, source_unique_key
+                            user_question_for_sources_feedback,
+                            response_content_for_feedback_sources,
+                            doc,
+                            source_unique_key,
                         )
 
             # Display feedback form for this response
             unique_key = f"{len(st.session_state.messages)}_{hash(response) % 10000}"
-            user_question_for_feedback = user_message.content if isinstance(user_message.content, str) else str(user_message.content) # Ensure string
+            user_question_for_feedback = (
+                user_message.content
+                if isinstance(user_message.content, str)
+                else str(user_message.content)
+            )  # Ensure string
             display_feedback_form(user_question_for_feedback, response, unique_key)
 
     # Log the assistant message being added to session state
