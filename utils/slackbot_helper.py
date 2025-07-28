@@ -183,7 +183,18 @@ def generate_ai_response_with_tools(llm, final_history, retrieve_context_tool):
         # First pass: Get response potentially with tool calls
         first_pass_response_obj = llm.invoke(final_history, tools=[retrieve_context_tool], tool_choice="auto")
         
-        full_response_text = first_pass_response_obj.content if first_pass_response_obj.content else ""
+        # Handle content that might be a string or list
+        full_response_text = ""
+        if first_pass_response_obj.content:
+            if isinstance(first_pass_response_obj.content, str):
+                full_response_text = first_pass_response_obj.content
+            elif isinstance(first_pass_response_obj.content, list):
+                # Extract text from multimodal content
+                text_parts = [part.get("text", "") for part in first_pass_response_obj.content if isinstance(part, dict) and part.get("type") == "text"]
+                full_response_text = " ".join(text_parts)
+            else:
+                full_response_text = str(first_pass_response_obj.content)
+        
         tool_calls_made = first_pass_response_obj.tool_calls if hasattr(first_pass_response_obj, "tool_calls") else []
         
         # If tool calls were made, execute them and get final response
@@ -213,9 +224,19 @@ def generate_ai_response_with_tools(llm, final_history, retrieve_context_tool):
                     updated_history.append(tool_message)
             
             # Get final response after tool execution
-            # Use invoke instead of stream for non-streaming behavior
             final_response_obj = llm.invoke(updated_history, tools=[retrieve_context_tool], tool_choice="auto")
-            response_content = final_response_obj.content if final_response_obj.content else ""
+            
+            # Handle final response content that might be a string or list
+            response_content = ""
+            if final_response_obj.content:
+                if isinstance(final_response_obj.content, str):
+                    response_content = final_response_obj.content
+                elif isinstance(final_response_obj.content, list):
+                    # Extract text from multimodal content
+                    text_parts = [part.get("text", "") for part in final_response_obj.content if isinstance(part, dict) and part.get("type") == "text"]
+                    response_content = " ".join(text_parts)
+                else:
+                    response_content = str(final_response_obj.content)
         else:
             response_content = full_response_text
         

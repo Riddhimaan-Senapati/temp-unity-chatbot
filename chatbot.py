@@ -110,6 +110,7 @@ retriever = initialize_knowledge_base_retriever(source_count)
 
 # Define the tool-compatible wrapper for retrieve_context
 def retrieve_context_tool(query: str):
+    logger.info(f"retrieve_context_tool called with query: '{query}'")
     context, relevant_docs = retrieve_context(retriever=retriever, prompt=query)
     # Convert relevant_docs to a serializable format if necessary for the tool output
     # For now, assuming relevant_docs are already compatible or can be directly returned
