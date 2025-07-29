@@ -98,9 +98,14 @@ def scrape_and_upload_link(link_url):
             # Add source URL to the content before uploading
             content_with_source = f"# Source: {link_url}\n\n" + content
 
-            # Prepare metadata
-            current_datetime = datetime.datetime.now().isoformat()
-            doc_metadata = {"SourceUrl": link_url, "ScrapedDatetime": current_datetime}
+            # Prepare metadata with UTC datetime
+            current_datetime_utc = datetime.datetime.now(
+                datetime.timezone.utc
+            ).isoformat()
+            doc_metadata = {
+                "SourceUrl": link_url,
+                "ScrapedDatetime": current_datetime_utc,
+            }
 
             # Upload content with metadata
             upload_content_to_s3(

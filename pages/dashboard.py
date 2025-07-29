@@ -6,6 +6,7 @@ import os
 from dotenv import load_dotenv
 import pandas as pd
 import json
+import pytz
 from utils.data_pipeline.scrape_and_upload_to_s3 import (
     run_scrape_and_upload_pipeline,
     scrape_and_upload_link,
@@ -20,6 +21,39 @@ load_dotenv()
 #  Configuration
 S3_BUCKET_NAME = os.getenv("S3_BUCKET_NAME")
 S3_FOLDER_PREFIX = os.getenv("S3_FOLDER_PREFIX")
+
+# Timezone configuration
+UTC = pytz.UTC
+EASTERN = pytz.timezone("US/Eastern")
+
+
+def convert_utc_to_eastern(utc_datetime_str):
+    """
+    Convert UTC datetime string to US Eastern Time (EST/EDT).
+    Automatically handles daylight saving time transitions.
+    """
+    try:
+        # Parse the UTC datetime string
+        if utc_datetime_str.endswith("+00:00"):
+            # Remove the timezone suffix if present
+            utc_datetime_str = utc_datetime_str[:-6]
+
+        # Parse the datetime
+        utc_dt = datetime.datetime.fromisoformat(utc_datetime_str)
+
+        # If the datetime is naive (no timezone info), assume it's UTC
+        if utc_dt.tzinfo is None:
+            utc_dt = UTC.localize(utc_dt)
+
+        # Convert to Eastern Time
+        eastern_dt = utc_dt.astimezone(EASTERN)
+
+        return eastern_dt
+    except Exception as e:
+        st.warning(
+            f"Could not convert datetime '{utc_datetime_str}' to Eastern Time: {e}"
+        )
+        return None
 
 
 #  S3 Data Retrieval Function
@@ -48,20 +82,21 @@ def get_scraped_data_from_s3(bucket_name, prefix):
                         scraped_datetime_str = metadata.get("scrapeddatetime")
 
                         if source_url and scraped_datetime_str:
-                            try:
-                                scraped_datetime = datetime.datetime.fromisoformat(
-                                    scraped_datetime_str
-                                )
+                            # Convert UTC to Eastern Time
+                            eastern_datetime = convert_utc_to_eastern(
+                                scraped_datetime_str
+                            )
+                            if eastern_datetime:
                                 scraped_items_list.append(
                                     {
                                         "URL": source_url,
-                                        "Last Scraped": scraped_datetime,
+                                        "Last Scraped": eastern_datetime,
                                         "S3 Key": key,
                                     }
                                 )
-                            except ValueError:
+                            else:
                                 st.warning(
-                                    f"Could not parse datetime '{scraped_datetime_str}' for {source_url} (Key: {key})"
+                                    f"Could not convert datetime '{scraped_datetime_str}' for {source_url} (Key: {key})"
                                 )
 
                     except ClientError as e:
@@ -210,8 +245,8 @@ with tab2:
                     help="The original URL that was scraped.",
                 ),
                 "Last Scraped": st.column_config.DatetimeColumn(
-                    "Last Scraped Date",
-                    help="The date and time when this URL was last scraped.",
+                    "Last Scraped Date (Eastern)",
+                    help="The date and time when this URL was last scraped (converted to US Eastern Time).",
                     format="YYYY-MM-DD HH:mm:ss",
                 ),
                 "S3 Key": st.column_config.TextColumn(
@@ -389,12 +424,12 @@ with tab3:
         with col2:
             scraped_time = slack_data["scraped_datetime"]
             if scraped_time != "Unknown":
-                try:
-                    dt = datetime.datetime.fromisoformat(scraped_time)
-                    scraped_time = dt.strftime("%Y-%m-%d %H:%M:%S")
-                except Exception as e:
-                    st.error(f"Error parsing scraped datetime: {e}")
-                    pass
+                eastern_dt = convert_utc_to_eastern(scraped_time)
+                if eastern_dt:
+                    # Format with timezone abbreviation (EST/EDT)
+                    scraped_time = eastern_dt.strftime("%Y-%m-%d %H:%M:%S %Z")
+                else:
+                    scraped_time = "Error converting time"
             st.metric("Last Scraped", scraped_time)
 
         st.markdown("---")
@@ -499,9 +534,13 @@ with tab5:
             # Create structured data with metadata
             data = {
                 "metadata": {
-                    "created_at": datetime.datetime.now().isoformat(),
+                    "created_at": datetime.datetime.now(
+                        datetime.timezone.utc
+                    ).isoformat(),
                     "total_entries": len(entries),
-                    "last_updated": datetime.datetime.now().isoformat(),
+                    "last_updated": datetime.datetime.now(
+                        datetime.timezone.utc
+                    ).isoformat(),
                 },
                 "entries": entries,
             }
@@ -698,13 +737,12 @@ with tab5:
             entry_type_display = entry.get("type", "unknown").replace("_", " ").title()
             created_at = entry.get("created_at", "Unknown")
 
-            # Format creation date
-            try:
-                dt = datetime.datetime.fromisoformat(created_at)
-                created_at_formatted = dt.strftime("%Y-%m-%d %H:%M")
-            except Exception as e:
+            # Format creation date - convert to Eastern Time
+            eastern_dt = convert_utc_to_eastern(created_at)
+            if eastern_dt:
+                created_at_formatted = eastern_dt.strftime("%Y-%m-%d %H:%M %Z")
+            else:
                 created_at_formatted = created_at
-                st.error(f"Error in formatting creation date: {e}")
 
             # Create container for each knowledge entry
             with st.container():

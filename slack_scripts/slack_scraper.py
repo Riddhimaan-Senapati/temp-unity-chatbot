@@ -160,7 +160,7 @@ def upload_markdown_to_s3(md_content: str, count: int, bucket: str, key: str):
             Body=md_content,
             ContentType="text/markdown",
             Metadata={
-                "ScrapedDatetime": datetime.now().isoformat(),
+                "ScrapedDatetime": datetime.now(timezone.utc).isoformat(),
                 "ConversationCount": str(count),
             },
         )
