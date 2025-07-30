@@ -51,6 +51,7 @@ jobs:
               SlackSigningSecret="${{ secrets.SLACK_SIGNING_SECRET }}" \
               KnowledgeBaseId="${{ secrets.KNOWLEDGE_BASE_ID }}" \
               S3BucketName="${{ secrets.S3_BUCKET_NAME }}" \
+              ModelId="${{ secrets.MODEL_ID }}" \
               LambdaTimeout=300 \
               LambdaMemorySize=1024 \
             --capabilities CAPABILITY_NAMED_IAM \
@@ -195,6 +196,7 @@ jobs:
               SLACK_SIGNING_SECRET=${{ secrets.SLACK_SIGNING_SECRET }},
               KNOWLEDGE_BASE_ID=${{ secrets.KNOWLEDGE_BASE_ID }},
               S3_BUCKET_NAME=${{ secrets.S3_BUCKET_NAME }},
+              MODEL_ID=${{ secrets.MODEL_ID }},
               PYTHONPATH=/opt/python:/var/runtime:/var/task
             }" \
             --timeout 300 \

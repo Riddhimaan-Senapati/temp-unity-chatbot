@@ -25,6 +25,10 @@ Parameters:
     Type: String
     Description: Name of the S3 bucket for the knowledge base
   
+  ModelId:
+    Type: String
+    Description: AWS Bedrock Model ID for the chatbot
+  
   LambdaTimeout:
     Type: Number
     Default: 300
@@ -125,6 +129,7 @@ Resources:
           SLACK_SIGNING_SECRET: !Ref SlackSigningSecret
           KNOWLEDGE_BASE_ID: !Ref KnowledgeBaseId
           S3_BUCKET_NAME: !Ref S3BucketName
+          MODEL_ID: !Ref ModelId
           PYTHONPATH: "/opt/python:/var/runtime:/var/task"
       # Layers will be added by GitHub Actions deployment
       Tags:
