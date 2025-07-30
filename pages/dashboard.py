@@ -574,7 +574,7 @@ with tab5:
             "created_at": datetime.datetime.now().isoformat(),
         }
 
-        if entry_type == "qa_pair":
+        if entry_type == "q&a_pair":
             new_entry["question"] = question
             new_entry["answer"] = answer
         else:  # knowledge_input
@@ -753,7 +753,7 @@ with tab5:
                 col1, col2 = st.columns([3, 1])
 
                 with col1:
-                    if entry.get("type") == "qa_pair":
+                    if entry.get("type") == "q&a_pair":
                         st.write("**Question:**")
                         st.write(entry.get("question", ""))
                         st.write("**Answer:**")
@@ -796,7 +796,9 @@ with tab5:
             st.markdown("---")
             col1, col2, col3 = st.columns(3)
 
-            qa_count = len([e for e in knowledge_entries if e.get("type") == "qa_pair"])
+            qa_count = len(
+                [e for e in knowledge_entries if e.get("type") == "q&a_pair"]
+            )
             knowledge_count = len(
                 [e for e in knowledge_entries if e.get("type") == "knowledge_input"]
             )

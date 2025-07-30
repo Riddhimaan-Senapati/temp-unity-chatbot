@@ -165,8 +165,13 @@ def approve_qa_pair(qa_pair):
     # Load current approved pairs
     approved_pairs = load_approved_qa_pairs()
 
-    # Add timestamp to the Q&A pair
-    qa_pair_with_metadata = qa_pair.copy()
+    # Create clean Q&A pair without original conversation and metadata
+    qa_pair_with_metadata = {
+        "question": qa_pair.get("question", ""),
+        "answers": qa_pair.get("answers", []),
+    }
+
+    # Add approval metadata
     qa_pair_with_metadata["approved_at"] = datetime.datetime.now().isoformat()
     qa_pair_with_metadata["source_file"] = st.session_state.current_qa_file
     qa_pair_with_metadata["original_index"] = st.session_state.current_qa_index

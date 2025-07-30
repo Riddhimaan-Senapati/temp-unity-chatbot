@@ -9,9 +9,12 @@ sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from utils.chatbot_helper import (
     initialize_bedrock_client,
     initialize_knowledge_base_retriever,
+    initialize_llm,
+)
+
+from test_helper import (
     query_without_system_prompt,
     query_with_system_prompt,
-    initialize_llm,
 )
 
 from utils.prompts import question_system_prompt
@@ -1084,7 +1087,7 @@ def system_prompt_comparison_json_to_markdown(json_file):
 ### Use test_model_with_without_system_prompt(model_name, thread_name, source_count) to test one model with/without system prompt
 if __name__ == "__main__":
     # Example: Test a single model on all conversation threads
-    test_model_on_database("llama-4-maverick", 10)
+    test_model_on_database("claude-3.5-haiku", 7)
 
     # Example: Test all models on a single thread
     # compare_models("Tricky GPU error driver update problem", 10)
