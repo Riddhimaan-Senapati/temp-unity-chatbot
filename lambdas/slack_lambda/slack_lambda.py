@@ -11,12 +11,13 @@ from utils.chatbot_helper import (
     initialize_bedrock_client,
     initialize_knowledge_base_retriever,
     initialize_llm,
+    retrieve_context,
 )
 from utils.slackbot_helper import (
     reconstruct_history_from_slack,
+    create_optimized_query,
     create_multimodal_message,
-    generate_ai_response_with_tools,
-    create_retrieve_context_tool,
+    generate_ai_response,
 )
 
 # set source count(how many chunks to retrieve)
@@ -42,17 +43,15 @@ app = App(
 bedrock_client = None
 llm = None
 retriever = None
-retrieve_context_tool = None
 
 
 def initialize_clients():
-    global bedrock_client, llm, retriever, retrieve_context_tool
+    global bedrock_client, llm, retriever
     if bedrock_client is None:
-        logger.info("Cold start: initializing Bedrock, LLM, retriever & tools")
+        logger.info("Cold start: initializing Bedrock, LLM & retriever")
         bedrock_client = initialize_bedrock_client()
         llm = initialize_llm(client=bedrock_client)
         retriever = initialize_knowledge_base_retriever(source_count=SOURCE_COUNT)
-        retrieve_context_tool = create_retrieve_context_tool(retriever)
         logger.info("Initialization complete.")
 
 
@@ -77,7 +76,7 @@ def skip_retry_middleware(body, req, next):
 def process_and_respond(body, say, client, context, logger):
     logger.info("Lazy listener: process_and_respond invoked")
     initialize_clients()
-    if not (llm and retriever and retrieve_context_tool):
+    if not (llm and retriever):
         say("The AI components are not available. Please contact an administrator.")
         return
 
@@ -92,40 +91,18 @@ def process_and_respond(body, say, client, context, logger):
         return
 
     try:
-        # Get bot_id from auth for proper message filtering
-        bot_id_from_auth = None
-        try:
-            auth_test = client.auth_test()
-            bot_id_from_auth = auth_test.get("bot_id")
-            logger.info(
-                f"Lambda bot_user_id: {bot_user_id}, bot_id_from_auth: {bot_id_from_auth}"
-            )
-        except Exception as auth_e:
-            logger.warning(f"Could not get bot_id_from_auth: {auth_e}")
-
         history = reconstruct_history_from_slack(
-            client, channel_id, thread_ts, bot_user_id, bot_id_from_auth
+            client, channel_id, thread_ts, bot_user_id
         )
         cleaned_text = user_text_raw.replace(f"<@{bot_user_id}>", "").strip()
-
-        # Handle empty messages
-        if not cleaned_text and not files:
-            cleaned_text = "help"
-
-        logger.info(
-            f"Lambda processing: cleaned_text='{cleaned_text}', files={len(files)}"
+        prompt_text = cleaned_text or (
+            "Describe the attached image(s)." if files else "help"
         )
-
-        current_msg = create_multimodal_message(cleaned_text, files)
+        optimized_q = create_optimized_query(llm, history, prompt_text)
+        context_data, _ = retrieve_context(retriever=retriever, prompt=optimized_q)
+        current_msg = create_multimodal_message(cleaned_text, context_data, files)
         final_history = history[:-1] + [current_msg]
-
-        logger.info(
-            f"Lambda calling generate_ai_response_with_tools with history length: {len(final_history)}"
-        )
-        full_response = generate_ai_response_with_tools(
-            llm, final_history, retrieve_context_tool
-        )
-
+        full_response = generate_ai_response(llm, final_history)
         say(text=full_response, thread_ts=thread_ts)
         logger.info(f"Responded to thread {thread_ts}")
     except Exception:
