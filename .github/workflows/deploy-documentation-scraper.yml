@@ -50,7 +50,7 @@ jobs:
               LambdaMemorySize=1024 \
               ScheduleExpression="cron(0 16 ? * SUN *)" \
               EnableScheduledExecution=true \
-              NotificationEmails=riddhimaan22@gmail.com \
+              NotificationEmails=rsenapati@umass.edu,hyuzukirmizi@umass.edu \
             --capabilities CAPABILITY_NAMED_IAM \
             --tags PROJECT=ai4cw
 

@@ -43,7 +43,7 @@ Parameters:
 
   NotificationEmails:
     Type: CommaDelimitedList
-    Default: "riddhimaan22@gmail.com"
+    Default: "rsenapati@umass.edu"
     Description: Comma-separated list of email addresses to receive notifications about scraper execution
 
 Resources:
