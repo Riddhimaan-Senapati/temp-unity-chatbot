@@ -50,6 +50,7 @@ jobs:
               LambdaMemorySize=1024 \
               ScheduleExpression="cron(0 16 ? * SUN *)" \
               EnableScheduledExecution=true \
+              NotificationEmails=riddhimaan22@gmail.com \
             --capabilities CAPABILITY_NAMED_IAM \
             --tags PROJECT=ai4cw
 
@@ -169,13 +170,22 @@ jobs:
           echo "Waiting for function code update to complete..."
           aws lambda wait function-updated --function-name "$FUNCTION_NAME"
 
-          # Update function configuration with layer
+          # Get SNS Topic ARN from CloudFormation stack
+          SNS_TOPIC_ARN=$(aws cloudformation describe-stacks \
+            --stack-name "unity-documentation-scraper-stack" \
+            --query 'Stacks[0].Outputs[?OutputKey==`SNSTopicArn`].OutputValue' \
+            --output text)
+
+          echo "SNS Topic ARN: $SNS_TOPIC_ARN"
+
+          # Update function configuration with layer and environment variables
           aws lambda update-function-configuration \
             --function-name "$FUNCTION_NAME" \
             --layers "$LAYER_ARN" \
             --environment Variables="{
               S3_BUCKET_NAME=${{ secrets.S3_BUCKET_NAME }},
               S3_FOLDER_PREFIX=documents/,
+              SNS_TOPIC_ARN=$SNS_TOPIC_ARN,
               PYTHONPATH=/opt/python:/var/runtime:/var/task
             }" \
             --timeout 900 \
@@ -189,8 +199,11 @@ jobs:
           echo "Function Name: ${{ needs.deploy-infrastructure.outputs.lambda-function-name }}"
           echo "Layer ARN: ${{ steps.lambda_layer.outputs.layer_arn }}"
           echo "Schedule: Sunday 12:00 PM EDT/11:00 AM EST (16:00 UTC) weekly"
+          echo "📧 Email Notifications: riddhimaan22@gmail.com"
           echo ""
           echo "📋 Next Steps:"
           echo "1. Check CloudWatch logs: /aws/lambda/${{ needs.deploy-infrastructure.outputs.lambda-function-name }}"
           echo "2. Monitor scheduled executions in EventBridge"
           echo "3. Verify scraped content in S3 bucket: ${{ secrets.S3_BUCKET_NAME }}"
+          echo "4. Confirm SNS email subscription (check your email for confirmation)"
+          echo "5. Test notifications by manually invoking the Lambda function"

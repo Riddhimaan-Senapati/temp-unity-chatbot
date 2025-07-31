@@ -5,6 +5,7 @@ import logging
 import os
 import sys
 from datetime import datetime
+import boto3
 
 # Add the project root to Python path for local development
 current_dir = os.path.dirname(os.path.abspath(__file__))
@@ -46,6 +47,44 @@ except ImportError as e:
 logger = logging.getLogger()
 logger.setLevel(logging.INFO)
 
+# Initialize SNS client
+sns_client = boto3.client("sns")
+
+
+def send_notification(subject, message, is_error=False):
+    """
+    Send SNS notification about scraper execution.
+
+    Args:
+        subject: Email subject
+        message: Email message body
+        is_error: Whether this is an error notification
+    """
+    try:
+        topic_arn = os.getenv("SNS_TOPIC_ARN")
+        if not topic_arn:
+            logger.warning("SNS_TOPIC_ARN not set, skipping notification")
+            return
+
+        # Add emoji and formatting based on success/error
+        if is_error:
+            formatted_subject = f"❌ {subject}"
+            formatted_message = f"🚨 ERROR ALERT 🚨\n\n{message}"
+        else:
+            formatted_subject = f"✅ {subject}"
+            formatted_message = f"🎉 SUCCESS 🎉\n\n{message}"
+
+        response = sns_client.publish(
+            TopicArn=topic_arn, Subject=formatted_subject, Message=formatted_message
+        )
+
+        logger.info(
+            f"SNS notification sent successfully. MessageId: {response['MessageId']}"
+        )
+
+    except Exception as e:
+        logger.error(f"Failed to send SNS notification: {str(e)}")
+
 
 def lambda_handler(event, context):
     """
@@ -80,6 +119,9 @@ def lambda_handler(event, context):
             f"S3_BUCKET_NAME: {'SET' if os.getenv('S3_BUCKET_NAME') else 'NOT SET'}"
         )
         logger.info(f"S3_FOLDER_PREFIX: {os.getenv('S3_FOLDER_PREFIX', 'NOT SET')}")
+        logger.info(
+            f"SNS_TOPIC_ARN: {'SET' if os.getenv('SNS_TOPIC_ARN') else 'NOT SET'}"
+        )
 
         # Validate required environment variables
         required_env_vars = ["S3_BUCKET_NAME"]
@@ -90,6 +132,22 @@ def lambda_handler(event, context):
                 f"Missing required environment variables: {', '.join(missing_vars)}"
             )
             logger.error(error_msg)
+
+            # Send configuration error notification
+            config_error_message = f"""Unity Documentation Scraper configuration error!
+
+⚙️ Configuration Issue:
+• Missing Environment Variables: {", ".join(missing_vars)}
+• Timestamp: {start_time.strftime("%Y-%m-%d %H:%M:%S UTC")}
+
+🔧 Action Required: Please check the Lambda function configuration and ensure all required environment variables are set."""
+
+            send_notification(
+                "Unity Documentation Scraper - Configuration Error",
+                config_error_message,
+                is_error=True,
+            )
+
             return {
                 "statusCode": 400,
                 "body": json.dumps(
@@ -112,6 +170,23 @@ def lambda_handler(event, context):
 
         logger.info(f"Scraping completed successfully in {execution_time:.2f} seconds")
 
+        # Send success notification
+        success_message = f"""Unity Documentation Scraper completed successfully!
+
+📊 Execution Details:
+• Start Time: {start_time.strftime("%Y-%m-%d %H:%M:%S UTC")}
+• End Time: {end_time.strftime("%Y-%m-%d %H:%M:%S UTC")}
+• Duration: {execution_time:.2f} seconds
+• Event Source: {event_source}
+• Result: {scraping_result if scraping_result else "Pipeline executed"}
+
+🔗 Check CloudWatch logs for detailed information:
+https://console.aws.amazon.com/cloudwatch/home?region=us-east-1#logsV2:log-groups/log-group/$252Faws$252Flambda$252Funity-documentation-scraper"""
+
+        send_notification(
+            "Unity Documentation Scraper - Success", success_message, is_error=False
+        )
+
         # Prepare success response
         response_body = {
             "message": "Documentation scraping completed successfully",
@@ -132,6 +207,25 @@ def lambda_handler(event, context):
 
         error_msg = f"Error during documentation scraping: {str(e)}"
         logger.error(error_msg, exc_info=True)
+
+        # Send error notification
+        error_message = f"""Unity Documentation Scraper encountered an error!
+
+❌ Error Details:
+• Error: {str(e)}
+• Start Time: {start_time.strftime("%Y-%m-%d %H:%M:%S UTC")}
+• End Time: {end_time.strftime("%Y-%m-%d %H:%M:%S UTC")}
+• Duration: {execution_time:.2f} seconds
+• Event Source: {event.get("source", "manual")}
+
+🔍 Please check CloudWatch logs for detailed error information:
+https://console.aws.amazon.com/cloudwatch/home?region=us-east-1#logsV2:log-groups/log-group/$252Faws$252Flambda$252Funity-documentation-scraper
+
+⚠️ Action Required: Please investigate and resolve the issue."""
+
+        send_notification(
+            "Unity Documentation Scraper - Error", error_message, is_error=True
+        )
 
         # Prepare error response
         error_response = {
