@@ -50,7 +50,7 @@ jobs:
               LambdaMemorySize=1024 \
               ScheduleExpression="cron(0 16 ? * SUN *)" \
               EnableScheduledExecution=true \
-              NotificationEmails=riddhimaan22@gmail.com \
+              NotificationEmails=rsenapati@umass.edu,hyuzukirmizi@umass.edu \
             --capabilities CAPABILITY_NAMED_IAM \
             --tags PROJECT=ai4cw
 
@@ -199,7 +199,7 @@ jobs:
           echo "Function Name: ${{ needs.deploy-infrastructure.outputs.lambda-function-name }}"
           echo "Layer ARN: ${{ steps.lambda_layer.outputs.layer_arn }}"
           echo "Schedule: Sunday 12:00 PM EDT/11:00 AM EST (16:00 UTC) weekly"
-          echo "📧 Email Notifications: From CloudFormation parameters"
+          echo "📧 Email Notifications: rsenapati@umass.edu,hyuzukirmizi@umass.edu"
           echo ""
           echo "📋 Next Steps:"
           echo "1. Check CloudWatch logs: /aws/lambda/${{ needs.deploy-infrastructure.outputs.lambda-function-name }}"
