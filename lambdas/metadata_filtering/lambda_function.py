@@ -9,7 +9,7 @@ logger = logging.getLogger()
 logger.setLevel(logging.INFO)
 
 # Constants
-MODEL_ID = "us.anthropic.claude-sonnet-4-20250514-v1:0"
+MODEL_ID = "anthropic.claude-3-haiku-20240307-v1:0"
 MAX_CONTENT_LENGTH = 8000  # Limit content length for LLM processing
 
 
@@ -252,37 +252,42 @@ def lambda_handler(event, context):
         for record in event.get("Records", []):
             # Parse S3 event
             bucket_name = record["s3"]["bucket"]["name"]
-            key = urllib.parse.unquote_plus(record["s3"]["object"]["key"])
+            object_key = urllib.parse.unquote_plus(record["s3"]["object"]["key"])
             event_name = record["eventName"]
 
             logger.info(
-                f"Processing {event_name} event for {key} in bucket {bucket_name}"
+                f"Processing {event_name} event for {object_key} in bucket {bucket_name}"
             )
+
+            # Skip metadata files
+            if ".metadata.json" in object_key:
+                logger.info(f"Skipping metadata file: {object_key}")
+                continue
+
+            # Process only main JSON files or MD files
+            if not (object_key.endswith(".json") or object_key.endswith(".md")):
+                logger.info(f"Skipping file: {object_key} (not .json or .md)")
+                continue
 
             # Only process object creation events
             if not event_name.startswith("ObjectCreated"):
                 logger.info(f"Skipping non-creation event: {event_name}")
                 continue
 
-            # Check if file should be processed
-            if not should_process_file(key):
-                logger.info(f"Skipping file: {key} (not eligible for processing)")
-                continue
-
             # Always process files - will create or update metadata files
-            metadata_key = f"{key}.metadata.json"
+            metadata_key = f"{object_key}.metadata.json"
             logger.info(
-                f"Processing {key} - will create/update metadata file: {metadata_key}"
+                f"Processing {object_key} - will create/update metadata file: {metadata_key}"
             )
 
             # Extract content from the file
-            file_content = extract_content_from_file(s3_client, bucket_name, key)
+            file_content = extract_content_from_file(s3_client, bucket_name, object_key)
             if not file_content:
-                logger.warning(f"Could not extract content from {key}")
+                logger.warning(f"Could not extract content from {object_key}")
                 continue
 
             # Generate metadata using LLM
-            prompt = generate_metadata_prompt(key, file_content)
+            prompt = generate_metadata_prompt(object_key, file_content)
 
             try:
                 llm_response = invoke_model_sync(
@@ -292,21 +297,21 @@ def lambda_handler(event, context):
 
                 # Create and upload metadata file
                 metadata_file_key = create_metadata_file(
-                    s3_client, bucket_name, key, metadata_attributes
+                    s3_client, bucket_name, object_key, metadata_attributes
                 )
 
                 processed_files.append(
                     {
-                        "source_file": key,
+                        "source_file": object_key,
                         "metadata_file": metadata_file_key,
                         "metadata_attributes": metadata_attributes,
                     }
                 )
 
-                logger.info(f"Successfully processed {key}")
+                logger.info(f"Successfully processed {object_key}")
 
             except Exception as e:
-                logger.error(f"Error processing {key}: {str(e)}")
+                logger.error(f"Error processing {object_key}: {str(e)}")
                 # Continue processing other files even if one fails
                 continue
 

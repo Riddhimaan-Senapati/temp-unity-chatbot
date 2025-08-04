@@ -8,8 +8,8 @@ logger.setLevel(logging.DEBUG)
 
 # Constants for chunking
 MAX_TOKENS = 500
-OVERLAP_PERCENTAGE = 0.1
-MODEL_ID = "us.anthropic.claude-sonnet-4-20250514-v1:0"
+OVERLAP_PERCENTAGE = 0.2
+MODEL_ID = "anthropic.claude-3-haiku-20240307-v1:0"
 
 
 def estimate_tokens(text):
