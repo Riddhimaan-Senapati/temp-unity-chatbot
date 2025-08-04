@@ -15,13 +15,13 @@ an AI-powered support system for Unity HPC(High Performance Computing) and AI Pl
 
 ### Key Features
 - **Multi-Platform Support**: Web interface (Streamlit) + Slack bot integration
-- **RAG Architecture**: AWS Bedrock + Claude 3.7 Sonnet with knowledge base retrieval
+- **RAG Architecture**: AWS Bedrock + Claude 4.0 Sonnet with knowledge base retrieval
 - **Automated Data Pipeline**: Documentation scraping and Slack conversation analysis
 - **Analytics Dashboard**: User feedback tracking and data pipeline management as well as keeping track of additional q&A pairs for the bot
 - **Production Ready**: AWS ECS deployment with CI/CD pipeline
 
 ### Technology Stack
-- **AI/ML**: AWS Bedrock, Claude 3.7 Sonnet, LangChain
+- **AI/ML**: AWS Bedrock, Claude 4.0 Sonnet, LangChain
 - **Frontend**: Streamlit, Python
 - **Backend**: Python, Slack Bolt SDK
 - **Cloud**: AWS (S3, ECS, ALB, CloudFormation, Bedrock)
@@ -55,7 +55,7 @@ an AI-powered support system for Unity HPC(High Performance Computing) and AI Pl
 
 ### Prerequisites
 - AWS account with S3 bucket and Bedrock Knowledge Base
-- Docker Desktop (for Docker setup) or Python 3.7+ (for local setup)
+- Docker Desktop (for Docker setup) or Python 4.0+ (for local setup)
 - Slack app with bot tokens (for Slack integration)
 
 ### Environment Setup
@@ -87,7 +87,7 @@ pip install -r requirements.txt
 
 # Run applications
 streamlit run chatbot.py        # Web interface
-python slack_bot.py             # Slack bot
+python slack_scripts/slack_bot.py             # Slack bot
 ```
 
 Access the web interface at `http://localhost:8501/`
