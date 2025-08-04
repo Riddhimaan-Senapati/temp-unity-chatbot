@@ -2,7 +2,7 @@ import logging
 import os
 import boto3
 import json
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 from dotenv import load_dotenv
 from slack_bolt import App
 from slack_sdk import WebClient
@@ -260,21 +260,28 @@ def run_slack_conversation_scraper(start_date_str=None):
 
     try:
         if not start_date_str:
-            start_date_str = "2025-05-03"  # Format: YYYY-MM-DD
-        oldest_timestamp = 0.0
-
-        try:
-            start_datetime = datetime.strptime(start_date_str, "%Y-%m-%d").replace(
-                tzinfo=timezone.utc
-            )
-            oldest_timestamp = start_datetime.timestamp()
+            # Default to last week's data
+            start_datetime = datetime.now(timezone.utc) - timedelta(days=7)
+            start_date_str = start_datetime.strftime("%Y-%m-%d")
             logger.info(
-                f"Setting scrape start date to {start_date_str}, which is Unix timestamp {oldest_timestamp}"
+                f"No start date provided, defaulting to last week: {start_date_str}"
             )
-        except ValueError:
-            logger.error(
-                f"Invalid date format for '{start_date_str}'. Please use YYYY-MM-DD. Scraping all messages."
-            )
+        else:
+            try:
+                start_datetime = datetime.strptime(start_date_str, "%Y-%m-%d").replace(
+                    tzinfo=timezone.utc
+                )
+            except ValueError:
+                logger.error(
+                    f"Invalid date format for '{start_date_str}'. Please use YYYY-MM-DD. Using last week instead."
+                )
+                start_datetime = datetime.now(timezone.utc) - timedelta(days=7)
+                start_date_str = start_datetime.strftime("%Y-%m-%d")
+
+        oldest_timestamp = start_datetime.timestamp()
+        logger.info(
+            f"Setting scrape start date to {start_date_str}, which is Unix timestamp {oldest_timestamp}"
+        )
 
         # The 'limit' parameter is now named 'limit_per_page' for clarity
         conversations, metrics = scrape_channel_conversations(

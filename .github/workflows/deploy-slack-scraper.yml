@@ -48,7 +48,7 @@ jobs:
               SlackBotToken=${{ secrets.SCRAPPER_SLACK_BOT_TOKEN }} \
               LambdaTimeout=900 \
               LambdaMemorySize=1024 \
-              ScheduleExpression="cron(0 18 ? * MON *)" \
+              ScheduleExpression="cron(0 16 ? * SUN *)" \
               EnableScheduledExecution=true \
               NotificationEmails=riddhimaan22@gmail.com \
             --capabilities CAPABILITY_NAMED_IAM \
@@ -199,7 +199,7 @@ jobs:
           echo "Function Name: ${{ needs.deploy-infrastructure.outputs.lambda-function-name }}"
           echo "Layer ARN: ${{ steps.lambda_layer.outputs.layer_arn }}"
           echo "Schedule: Sunday 12:00 PM EDT/11:00 AM EST (16:00 UTC) weekly"
-          echo "📧 Email Notifications: riddhimaan22@gmail.com"
+          echo "📧 Email Notifications: From CloudFormation parameters"
           echo ""
           echo "📋 Next Steps:"
           echo "1. Check CloudWatch logs: /aws/lambda/${{ needs.deploy-infrastructure.outputs.lambda-function-name }}"

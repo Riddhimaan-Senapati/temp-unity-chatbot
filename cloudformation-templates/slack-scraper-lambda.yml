@@ -135,7 +135,7 @@ Resources:
     Condition: EnableSchedule
     Properties:
       Name: !Sub "${AWS::StackName}-slack-scraper-schedule"
-      Description: "Schedule for automatic Slack conversation scraping - Monday 6:00 PM UTC weekly"
+      Description: "Schedule for automatic Slack conversation scraping - Sunday 4:00 PM UTC weekly"
       ScheduleExpression: !Ref ScheduleExpression
       State: ENABLED
       Targets:
@@ -145,7 +145,7 @@ Resources:
             {
               "source": "eventbridge-schedule",
               "schedule": "${ScheduleExpression}",
-              "scheduled_time": "Monday 6:00 PM UTC",
+              "scheduled_time": "Sunday 4:00 PM UTC",
               "scrape_params": {}
             }
 
