@@ -9,12 +9,12 @@ Parameters:
 
   S3BucketName:
     Type: String
-    Description: Name of the S3 bucket for storing scraped conversations
+    Description: Name of the S3 bucket for storing scraped content
 
   SlackBotToken:
     Type: String
     NoEcho: true
-    Description: Slack bot token for scraping conversations
+    Description: Slack Bot Token for scraping conversations
 
   LambdaTimeout:
     Type: Number
@@ -25,7 +25,7 @@ Parameters:
 
   LambdaMemorySize:
     Type: Number
-    Default: 512
+    Default: 1024
     MinValue: 128
     MaxValue: 10240
     Description: Lambda function memory size in MB
@@ -40,6 +40,11 @@ Parameters:
     Default: "true"
     AllowedValues: ["true", "false"]
     Description: Whether to enable scheduled execution of the scraper
+
+  NotificationEmails:
+    Type: CommaDelimitedList
+    Default: "riddhimaan22@gmail.com"
+    Description: Comma-separated list of email addresses to receive notifications about scraper execution
 
 Resources:
   # IAM Role for Lambda
@@ -82,6 +87,14 @@ Resources:
                   - logs:CreateLogStream
                   - logs:PutLogEvents
                 Resource: !Sub "arn:aws:logs:${AWS::Region}:${AWS::AccountId}:log-group:/aws/lambda/*"
+        - PolicyName: SNSPublishPolicy
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: Allow
+                Action:
+                  - sns:Publish
+                Resource: !Ref SlackScraperNotificationTopic
       Tags:
         - Key: PROJECT
           Value: !Ref ProjectTag
@@ -90,7 +103,7 @@ Resources:
   SlackScraperFunction:
     Type: AWS::Lambda::Function
     Properties:
-      FunctionName: "unity-slack-channel-scraper"
+      FunctionName: "unity-slack-scraper"
       Description: Lambda function to scrape Slack conversations and upload to S3
       Runtime: python3.12
       Handler: lambda_function.lambda_handler
@@ -109,6 +122,7 @@ Resources:
         Variables:
           S3_BUCKET_NAME: !Ref S3BucketName
           SCRAPPER_SLACK_BOT_TOKEN: !Ref SlackBotToken
+          SNS_TOPIC_ARN: !Ref SlackScraperNotificationTopic
           PYTHONPATH: "/opt/python:/var/runtime:/var/task"
       # Layers will be added by GitHub Actions deployment
       Tags:
@@ -121,7 +135,7 @@ Resources:
     Condition: EnableSchedule
     Properties:
       Name: !Sub "${AWS::StackName}-slack-scraper-schedule"
-      Description: "Schedule for automatic Slack conversation scraping - Sunday 12:00 PM EDT/11:00 AM EST weekly"
+      Description: "Schedule for automatic Slack conversation scraping - Monday 6:00 PM UTC weekly"
       ScheduleExpression: !Ref ScheduleExpression
       State: ENABLED
       Targets:
@@ -131,8 +145,8 @@ Resources:
             {
               "source": "eventbridge-schedule",
               "schedule": "${ScheduleExpression}",
-              "scheduled_time": "Sunday 12:00 PM EDT/11:00 AM EST",
-              "days_back": 7
+              "scheduled_time": "Monday 6:00 PM UTC",
+              "scrape_params": {}
             }
 
   # Permission for EventBridge to invoke Lambda
@@ -151,6 +165,83 @@ Resources:
     Properties:
       LogGroupName: !Sub "/aws/lambda/${SlackScraperFunction}"
       RetentionInDays: 14
+
+  # SNS Topic for notifications
+  SlackScraperNotificationTopic:
+    Type: AWS::SNS::Topic
+    Properties:
+      TopicName: !Sub "${AWS::StackName}-slack-scraper-notifications"
+      DisplayName: "Unity Slack Scraper Notifications"
+      Tags:
+        - Key: PROJECT
+          Value: !Ref ProjectTag
+
+  # SNS Subscriptions for email notifications
+  SlackScraperEmailSubscriptions:
+    Type: AWS::CloudFormation::CustomResource
+    Properties:
+      ServiceToken: !GetAtt EmailSubscriptionFunction.Arn
+      TopicArn: !Ref SlackScraperNotificationTopic
+      EmailList: !Ref NotificationEmails
+
+  # Lambda function to create multiple email subscriptions
+  EmailSubscriptionFunction:
+    Type: AWS::Lambda::Function
+    Properties:
+      FunctionName: !Sub "${AWS::StackName}-email-subscription-handler"
+      Runtime: python3.12
+      Handler: index.handler
+      Role: !GetAtt EmailSubscriptionRole.Arn
+      Code:
+        ZipFile: |
+          import boto3
+          import cfnresponse
+          import json
+          
+          def handler(event, context):
+              try:
+                  sns = boto3.client('sns')
+                  topic_arn = event['ResourceProperties']['TopicArn']
+                  email_list = event['ResourceProperties']['EmailList']
+                  
+                  if event['RequestType'] == 'Create' or event['RequestType'] == 'Update':
+                      for email in email_list:
+                          email = email.strip()
+                          if email:
+                              sns.subscribe(
+                                  TopicArn=topic_arn,
+                                  Protocol='email',
+                                  Endpoint=email
+                              )
+                              print(f"Subscribed {email} to {topic_arn}")
+                  
+                  cfnresponse.send(event, context, cfnresponse.SUCCESS, {})
+              except Exception as e:
+                  print(f"Error: {str(e)}")
+                  cfnresponse.send(event, context, cfnresponse.FAILED, {})
+
+  # IAM Role for the email subscription Lambda
+  EmailSubscriptionRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: lambda.amazonaws.com
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
+      Policies:
+        - PolicyName: SNSSubscribePolicy
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - sns:Subscribe
+                Resource: !Ref SlackScraperNotificationTopic
 
 Conditions:
   EnableSchedule: !Equals [!Ref EnableScheduledExecution, "true"]
@@ -176,7 +267,13 @@ Outputs:
 
   ScheduleRuleArn:
     Condition: EnableSchedule
-    Description: ARN of the EventBridge rule for scheduled execution
+    Description: ARN of the CloudWatch Events rule for scheduled execution
     Value: !GetAtt SlackScraperScheduleRule.Arn
     Export:
       Name: !Sub "${AWS::StackName}-ScheduleRuleArn"
+
+  SNSTopicArn:
+    Description: ARN of the SNS topic for notifications
+    Value: !Ref SlackScraperNotificationTopic
+    Export:
+      Name: !Sub "${AWS::StackName}-SNSTopicArn"

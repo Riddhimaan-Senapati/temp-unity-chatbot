@@ -14,7 +14,7 @@ from utils.data_pipeline.scrape_and_upload_to_s3 import (
 from utils.feedback import display_feedback_dashboard
 from utils.qa_pair_tab import display_qa_pair_review_tab
 from utils.streamlit_components import confirm_action, trigger_confirmation
-from slack_scripts.slack_scraper import main as slack_scraper_main
+from slack_scripts.slack_scraper import run_slack_conversation_scraper
 
 load_dotenv()
 
@@ -356,14 +356,66 @@ with tab3:
             st.error(f"Unexpected error: {e}")
             return None
 
+    @st.cache_data(ttl=3600)
+    def get_slack_scraper_metrics():
+        """Get Slack scraper metrics from S3 metadata or CloudWatch logs"""
+        try:
+            s3 = boto3.client("s3")
+            s3_key = "slack_conversations/scraper_metrics.json"
+
+            try:
+                response = s3.get_object(Bucket=S3_BUCKET_NAME, Key=s3_key)
+                content = response["Body"].read().decode("utf-8")
+                metrics = json.loads(content)
+                return metrics
+            except ClientError as e:
+                if e.response["Error"]["Code"] == "NoSuchKey":
+                    return None
+                else:
+                    raise e
+        except Exception as e:
+            st.error(f"Error getting Slack scraper metrics: {e}")
+            return None
+
     def run_slack_scraper_and_refresh(start_date=None):
         """Run the Slack scraper and refresh the dashboard"""
         st.info(
             f"Scraping Slack channel conversations from {start_date or 'beginning'}..."
         )
         with st.spinner("Scraping conversations from Slack..."):
-            slack_scraper_main(start_date)
-        st.success("Slack scraping complete! Refreshing dashboard...")
+            result = run_slack_conversation_scraper(start_date)
+
+            # Save metrics to S3 for dashboard display
+            if result.get("metrics"):
+                try:
+                    s3 = boto3.client("s3")
+                    metrics_data = {
+                        "last_run": result["start_time"].isoformat()
+                        if result.get("start_time")
+                        else datetime.datetime.now().isoformat(),
+                        "success": result.get("success", False),
+                        "metrics": result.get("metrics", {}),
+                        "execution_time": (
+                            result["end_time"] - result["start_time"]
+                        ).total_seconds()
+                        if result.get("end_time") and result.get("start_time")
+                        else 0,
+                    }
+
+                    s3.put_object(
+                        Bucket=S3_BUCKET_NAME,
+                        Key="slack_conversations/scraper_metrics.json",
+                        Body=json.dumps(metrics_data, default=str),
+                        ContentType="application/json",
+                    )
+                except Exception as e:
+                    st.warning(f"Could not save metrics: {e}")
+
+        if result.get("success"):
+            st.success("Slack scraping complete! Refreshing dashboard...")
+        else:
+            st.error(f"Slack scraping failed: {result.get('error', 'Unknown error')}")
+
         st.cache_data.clear()
         st.rerun()
 
@@ -415,22 +467,72 @@ with tab3:
 
     # Get and display Slack conversations
     slack_data = get_slack_conversations_from_s3()
+    slack_metrics = get_slack_scraper_metrics()
 
     if slack_data:
-        # Display metadata
-        col1, col2 = st.columns(2)
-        with col1:
-            st.metric("Conversations", slack_data["conversation_count"])
-        with col2:
-            scraped_time = slack_data["scraped_datetime"]
-            if scraped_time != "Unknown":
-                eastern_dt = convert_utc_to_eastern(scraped_time)
-                if eastern_dt:
-                    # Format with timezone abbreviation (EST/EDT)
-                    scraped_time = eastern_dt.strftime("%Y-%m-%d %H:%M:%S %Z")
-                else:
-                    scraped_time = "Error converting time"
-            st.metric("Last Scraped", scraped_time)
+        # Display enhanced metadata with scraper metrics
+        if slack_metrics:
+            col1, col2, col3, col4 = st.columns(4)
+            with col1:
+                st.metric(
+                    "Total Conversations",
+                    slack_metrics.get("metrics", {}).get("total_conversations", "N/A"),
+                )
+            with col2:
+                st.metric(
+                    "≤10 Replies",
+                    slack_metrics.get("metrics", {}).get(
+                        "conversations_with_10_or_less_replies", "N/A"
+                    ),
+                )
+            with col3:
+                st.metric(
+                    "Actually Scraped",
+                    slack_metrics.get("metrics", {}).get(
+                        "conversations_scraped", "N/A"
+                    ),
+                )
+            with col4:
+                st.metric(
+                    "Skipped (>10 replies)",
+                    slack_metrics.get("metrics", {}).get(
+                        "conversations_skipped", "N/A"
+                    ),
+                )
+
+            # Additional metrics row
+            col1, col2, col3 = st.columns(3)
+            with col1:
+                scraped_time = slack_data["scraped_datetime"]
+                if scraped_time != "Unknown":
+                    eastern_dt = convert_utc_to_eastern(scraped_time)
+                    if eastern_dt:
+                        scraped_time = eastern_dt.strftime("%Y-%m-%d %H:%M:%S %Z")
+                    else:
+                        scraped_time = "Error converting time"
+                st.metric("Last Scraped", scraped_time)
+            with col2:
+                execution_time = slack_metrics.get("execution_time", 0)
+                st.metric("Last Execution Time", f"{execution_time:.1f}s")
+            with col3:
+                success_status = (
+                    "✅ Success" if slack_metrics.get("success") else "❌ Failed"
+                )
+                st.metric("Last Run Status", success_status)
+        else:
+            # Fallback to basic metrics if detailed metrics not available
+            col1, col2 = st.columns(2)
+            with col1:
+                st.metric("Conversations", slack_data["conversation_count"])
+            with col2:
+                scraped_time = slack_data["scraped_datetime"]
+                if scraped_time != "Unknown":
+                    eastern_dt = convert_utc_to_eastern(scraped_time)
+                    if eastern_dt:
+                        scraped_time = eastern_dt.strftime("%Y-%m-%d %H:%M:%S %Z")
+                    else:
+                        scraped_time = "Error converting time"
+                st.metric("Last Scraped", scraped_time)
 
         st.markdown("---")
 

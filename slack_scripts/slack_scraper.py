@@ -1,6 +1,7 @@
 import logging
 import os
 import boto3
+import json
 from datetime import datetime, timezone
 from dotenv import load_dotenv
 from slack_bolt import App
@@ -50,6 +51,9 @@ def scrape_channel_conversations(
     """
     Fetches ALL messages since `oldest_timestamp` by handling pagination,
     and gets their replies, ignoring threads with more than 10 replies.
+
+    Returns:
+        tuple: (conversations, metrics) where metrics contains scraping statistics
     """
     logger.info(
         f"Scraping channel {channel_id} for all messages since timestamp {oldest_timestamp}..."
@@ -57,6 +61,12 @@ def scrape_channel_conversations(
 
     all_messages = []
     next_cursor = None
+    metrics = {
+        "total_conversations": 0,
+        "conversations_with_10_or_less_replies": 0,
+        "conversations_scraped": 0,
+        "conversations_skipped": 0,
+    }
 
     #  Loop to handle pagination
     # Keep fetching pages as long as Slack provides a 'next_cursor'.
@@ -87,13 +97,18 @@ def scrape_channel_conversations(
             # No more pages, exit the loop
             break
 
+    metrics["total_conversations"] = len(all_messages)
     logger.info(
         f"Total parent messages fetched: {len(all_messages)}. Processing threads..."
     )
     conversations = []
 
+    # Initialize S3 client for immediate writes
+    s3_client = boto3.client("s3")
+    bucket = os.getenv("S3_BUCKET_NAME")
+
     # The rest of the function processes the `all_messages` list as before.
-    for msg in all_messages:
+    for i, msg in enumerate(all_messages):
         conv = {
             "timestamp": msg.get("ts"),
             "user": msg.get("user"),
@@ -103,11 +118,16 @@ def scrape_channel_conversations(
 
         reply_count = msg.get("reply_count", 0)
 
+        # Count conversations with 10 or less replies
+        if reply_count <= 10:
+            metrics["conversations_with_10_or_less_replies"] += 1
+
         if msg.get("thread_ts"):
             if reply_count > 10:
                 logger.warning(
                     f"Skipping thread for message {msg['ts']} because it has {reply_count} replies (more than 10)."
                 )
+                metrics["conversations_skipped"] += 1
                 conversations.append(conv)
                 continue
 
@@ -129,10 +149,15 @@ def scrape_channel_conversations(
                     )
 
         conversations.append(conv)
+        metrics["conversations_scraped"] += 1
+
+        # Write to S3 after every conversation
+        if bucket:
+            write_conversations_to_s3(s3_client, bucket, conversations, metrics)
 
     # The API returns messages from newest to oldest, so we reverse the final list
     # to get a chronological order from oldest to newest.
-    return conversations[::-1]
+    return conversations[::-1], metrics
 
 
 def convert_to_markdown(conversations: list) -> str:
@@ -148,6 +173,48 @@ def convert_to_markdown(conversations: list) -> str:
                 md += f"- **Reply {j}** ({r['user']}, {datetime.fromtimestamp(float(r['timestamp']), tz=timezone.utc).strftime('%H:%M:%S')}): {r['text']}\n"
         md += "\n---\n\n"
     return md
+
+
+def write_conversations_to_s3(
+    s3_client, bucket: str, conversations: list, metrics: dict
+):
+    """Write conversations to S3 immediately after each one."""
+    if not bucket or not conversations:
+        return
+
+    try:
+        md_content = convert_to_markdown(conversations)
+        key = "slack_conversations/slack_conversations.md"
+
+        s3_client.put_object(
+            Bucket=bucket,
+            Key=key,
+            Body=md_content,
+            ContentType="text/markdown",
+            Metadata={
+                "ScrapedDatetime": datetime.now(timezone.utc).isoformat(),
+                "ConversationCount": str(len(conversations)),
+            },
+        )
+
+        # Save metrics
+        metrics_key = "slack_conversations/scraper_metrics.json"
+        metrics_data = {
+            "last_run": datetime.now(timezone.utc).isoformat(),
+            "success": True,
+            "metrics": metrics,
+            "total_conversations_written": len(conversations),
+        }
+
+        s3_client.put_object(
+            Bucket=bucket,
+            Key=metrics_key,
+            Body=json.dumps(metrics_data, default=str),
+            ContentType="application/json",
+        )
+
+    except Exception as e:
+        logger.error(f"S3 upload failed: {e}", exc_info=True)
 
 
 def upload_markdown_to_s3(md_content: str, count: int, bucket: str, key: str):
@@ -167,63 +234,102 @@ def upload_markdown_to_s3(md_content: str, count: int, bucket: str, key: str):
         logger.info(f"Successfully uploaded to s3://{bucket}/{key}")
     except Exception as e:
         logger.error(f"S3 upload failed: {e}", exc_info=True)
+        raise  # Re-raise to be caught by the main function
+
+
+def run_slack_conversation_scraper(start_date_str=None):
+    """
+    Main function to scrape Slack conversations with detailed metrics.
+
+    Args:
+        start_date_str: Start date in YYYY-MM-DD format
+
+    Returns:
+        dict: Scraping results with metrics and status
+    """
+    channel_id = "C04VBHU8QQN"
+    limit_per_page = 200
+
+    result = {
+        "success": False,
+        "start_time": datetime.now(timezone.utc),
+        "end_time": None,
+        "metrics": {},
+        "error": None,
+    }
+
+    try:
+        if not start_date_str:
+            start_date_str = "2025-05-03"  # Format: YYYY-MM-DD
+        oldest_timestamp = 0.0
+
+        try:
+            start_datetime = datetime.strptime(start_date_str, "%Y-%m-%d").replace(
+                tzinfo=timezone.utc
+            )
+            oldest_timestamp = start_datetime.timestamp()
+            logger.info(
+                f"Setting scrape start date to {start_date_str}, which is Unix timestamp {oldest_timestamp}"
+            )
+        except ValueError:
+            logger.error(
+                f"Invalid date format for '{start_date_str}'. Please use YYYY-MM-DD. Scraping all messages."
+            )
+
+        # The 'limit' parameter is now named 'limit_per_page' for clarity
+        conversations, metrics = scrape_channel_conversations(
+            client=app.client,
+            channel_id=channel_id,
+            limit_per_page=limit_per_page,
+            oldest_timestamp=oldest_timestamp,
+        )
+
+        result["metrics"] = metrics
+
+        if not conversations:
+            logger.warning(
+                f"No conversations were found in channel {channel_id} since {start_date_str}."
+            )
+            result["success"] = True
+            result["end_time"] = datetime.now(timezone.utc)
+            return result
+
+        md = convert_to_markdown(conversations)
+
+        bucket = os.getenv("S3_BUCKET_NAME")
+        key = "slack_conversations/slack_conversations.md"
+
+        if bucket:
+            upload_markdown_to_s3(md, len(conversations), bucket, key)
+        else:
+            logger.warning(
+                "S3_BUCKET_NAME not set, skipping S3 upload. Markdown content will be printed below."
+            )
+            print("\n--- Converted Markdown ---\n")
+            print(md)
+
+        logger.info(
+            f"Scraped a total of {len(conversations)} conversations successfully."
+        )
+        logger.info(f"Metrics: {metrics}")
+
+        result["success"] = True
+        result["end_time"] = datetime.now(timezone.utc)
+        return result
+
+    except Exception as e:
+        logger.error(f"Error in slack scraper: {str(e)}", exc_info=True)
+        result["error"] = str(e)
+        result["end_time"] = datetime.now(timezone.utc)
+        return result
 
 
 def main(start_date_str=None):
-    channel_id = "C04VBHU8QQN"
-    # This limit is now per API call, not the total limit. 200 is a good number.
-    limit_per_page = 200
-
-    if not start_date_str:
-        start_date_str = "2025-05-03"  # Format: YYYY-MM-DD
-    oldest_timestamp = 0.0
-
-    try:
-        start_datetime = datetime.strptime(start_date_str, "%Y-%m-%d").replace(
-            tzinfo=timezone.utc
-        )
-        oldest_timestamp = start_datetime.timestamp()
-        logger.info(
-            f"Setting scrape start date to {start_date_str}, which is Unix timestamp {oldest_timestamp}"
-        )
-    except ValueError:
-        logger.error(
-            f"Invalid date format for '{start_date_str}'. Please use YYYY-MM-DD. Scraping all messages."
-        )
-
-    # The 'limit' parameter is now named 'limit_per_page' for clarity
-    conversations = scrape_channel_conversations(
-        client=app.client,
-        channel_id=channel_id,
-        limit_per_page=limit_per_page,
-        oldest_timestamp=oldest_timestamp,
-    )
-
-    if not conversations:
-        logger.warning(
-            f"No conversations were found in channel {channel_id} since {start_date_str}."
-        )
-        return
-
-    md = convert_to_markdown(conversations)
-
-    bucket = os.getenv("S3_BUCKET_NAME")
-    key = "slack_conversations/slack_conversations.md"
-
-    if bucket:
-        upload_markdown_to_s3(md, len(conversations), bucket, key)
-    else:
-        logger.warning(
-            "S3_BUCKET_NAME not set, skipping S3 upload. Markdown content will be printed below."
-        )
-        print("\n--- Converted Markdown ---\n")
-        print(md)
-
-    logger.info(f"Scraped a total of {len(conversations)} conversations successfully.")
-    # Printing details for every single conversation might be too verbose if there are many.
-    # print(f"First 10 conversations:")
-    # for idx, conv in enumerate(conversations[:10], 1):
-    #     print(f"  Conversation {idx}: User {conv['user']}, {len(conv['thread_messages'])} thread replies found.")
+    """Legacy main function for backward compatibility."""
+    result = run_slack_conversation_scraper(start_date_str)
+    if not result["success"] and result["error"]:
+        logger.error(f"Scraping failed: {result['error']}")
+    return result
 
 
 if __name__ == "__main__":
