@@ -7,6 +7,7 @@ an AI-powered support system for Unity HPC(High Performance Computing) and AI Pl
 - [🎯 Overview](#-overview)
 - [🏗️ Architecture](#️-architecture)
 - [📸 Screenshots](#-screenshots)
+- [🛠️ Development Setup](#️-development-setup)
 - [🚀 Quick Start](#-quick-start)
 - [📂 Project Structure](#-project-structure)
 - [🏗️ Deployment](#️-deployment)
@@ -51,6 +52,31 @@ an AI-powered support system for Unity HPC(High Performance Computing) and AI Pl
 
 
 
+## 🛠️ Development Setup
+
+### Package Management
+This project uses [uv](https://github.com/astral-sh/uv) for faster Python package management. Install it first:
+```bash
+pip install uv
+```
+
+### Pre-commit Hooks
+This project uses pre-commit hooks with ruff for code formatting and linting:
+
+```bash
+# Install pre-commit
+uv pip install pre-commit
+
+# Install the pre-commit hook
+pre-commit install
+
+# Run pre-commit on all files
+pre-commit run --all-files
+
+# For emergency commits (skip pre-commit)
+git commit --no-verify
+```
+
 ## 🚀 Quick Start
 
 ### Prerequisites
@@ -83,7 +109,7 @@ source .venv/bin/activate  # Linux/Mac
 # .venv\Scripts\activate  # Windows
 
 # Install dependencies
-pip install -r requirements.txt
+uv pip install -r requirements.txt
 
 # Run applications
 streamlit run chatbot.py        # Web interface

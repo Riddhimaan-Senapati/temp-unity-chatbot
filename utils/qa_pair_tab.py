@@ -174,7 +174,6 @@ def approve_qa_pair(qa_pair):
     # Add approval metadata
     qa_pair_with_metadata["approved_at"] = datetime.datetime.now().isoformat()
     qa_pair_with_metadata["source_file"] = st.session_state.current_qa_file
-    qa_pair_with_metadata["original_index"] = st.session_state.current_qa_index
 
     # Add to approved list
     approved_pairs.append(qa_pair_with_metadata)
@@ -447,16 +446,6 @@ def display_qa_pair_review_tab():
                                 ans for ans in edited_answers if ans.strip()
                             ],  # Remove empty answers
                         }
-
-                        # Preserve original conversation and metadata
-                        for key in [
-                            "original_conversation",
-                            "conversation_index",
-                            "total_conversations",
-                            "generated_at",
-                        ]:
-                            if key in current_pair:
-                                updated_pair[key] = current_pair[key]
 
                         if updated_pair["question"].strip() and updated_pair["answers"]:
                             if approve_qa_pair(updated_pair):
